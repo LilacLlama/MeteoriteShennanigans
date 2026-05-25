@@ -1,4 +1,4 @@
-name: Deploy Frontend → Vercel
+name: Deploy Frontend → S3 + CloudFront
 
 on:
   push:
@@ -6,6 +6,9 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/deploy-frontend.yml"
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
 
 jobs:
   deploy:
@@ -28,26 +31,67 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      # ── Install & Build ──────────────────────────────────────────────────────
+      # ── AWS Credentials ─────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Build ────────────────────────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
       - name: Build
         env:
-          # Injected at build time so the bundle points at the live Lambda URL
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          # Injected at build time so the bundle knows where to send API calls.
+          # Value is the Lambda Function URL, stored as a GitHub Actions variable.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npm run build
 
-      # ── Deploy to Vercel ─────────────────────────────────────────────────────
-      - name: Deploy to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # ── Deploy to S3 ─────────────────────────────────────────────────────────
+      # Two-pass sync to set different Cache-Control headers per file type:
+      #   assets/**  → immutable, cache for 1 year (Vite content-hashes filenames)
+      #   everything else (index.html, etc.) → no-cache (always check for updates)
+      # --delete removes files in S3 that no longer exist in the build output.
+      - name: Sync assets to S3 (long cache)
         run: |
-          npm install -g vercel
-          vercel deploy --prebuilt --prod \
-            --token $VERCEL_TOKEN \
-            --yes
+          aws s3 sync dist/assets/ s3://${{ vars.FRONTEND_BUCKET }}/assets/ \
+            --cache-control "max-age=31536000,immutable" \
+            --delete
 
-          echo "🚀 Frontend deployed to Vercel" >> $GITHUB_STEP_SUMMARY
+      - name: Sync root files to S3 (no cache)
+        run: |
+          aws s3 sync dist/ s3://${{ vars.FRONTEND_BUCKET }}/ \
+            --cache-control "no-cache" \
+            --exclude "assets/*" \
+            --delete
+
+      # ── Invalidate CloudFront cache ──────────────────────────────────────────
+      # CloudFront caches files at edge locations. After uploading new files to
+      # S3, we invalidate /* so edges fetch fresh copies on the next request.
+      # The first 1,000 invalidation paths/month are free; /* counts as one path.
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CF_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+      # ── Summary ──────────────────────────────────────────────────────────────
+      - name: Job summary
+        run: |
+          echo "🚀 Frontend deployed → https://$(aws cloudfront get-distribution \
+            --id ${{ vars.CF_DISTRIBUTION_ID }} \
+            --query 'Distribution.DomainName' --output text)" >> $GITHUB_STEP_SUMMARY
+
+# ── Required GitHub configuration ───────────────────────────────────────────
+# Secrets (Settings → Secrets and variables → Actions → Secrets):
+#   AWS_ACCESS_KEY_ID      — CI IAM user (created by scripts/bootstrap.sh)
+#   AWS_SECRET_ACCESS_KEY  — CI IAM user secret
+#
+# Variables (Settings → Secrets and variables → Actions → Variables):
+#   AWS_REGION             — e.g. us-east-2
+#   FRONTEND_BUCKET        — S3 bucket name (printed by make bootstrap)
+#   CF_DISTRIBUTION_ID     — CloudFront distribution ID (printed by make bootstrap)
+#   VITE_API_URL           — Lambda Function URL (printed by make bootstrap)

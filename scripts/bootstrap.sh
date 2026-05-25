@@ -58,7 +58,7 @@ fi
 echo "==> Creating IAM user: ${CI_USER}"
 
 # Least-privilege policy for the GitHub Actions CI user.
-# Three statements, each scoped as tightly as AWS allows:
+# Five statements, each scoped as tightly as AWS allows:
 #
 #   ECRAuth       — GetAuthorizationToken is account-level; AWS does not support
 #                   resource restrictions on this action, so Resource: * is
@@ -70,6 +70,16 @@ echo "==> Creating IAM user: ${CI_USER}"
 #
 #   Lambda        — Minimum actions to deploy a new container image and verify
 #                   it went live. Scoped to the single Lambda function ARN.
+#
+#   S3Frontend    — Read/write access to the frontend S3 bucket only.
+#                   The bucket name is predictable from APP_NAME so we can
+#                   scope it here before Terraform runs.
+#
+#   CloudFront    — CreateInvalidation to bust the CDN cache after each deploy.
+#                   GetDistribution to read the domain name for the job summary.
+#                   Scoped to all distributions in the account (the distribution
+#                   ID isn't known until after terraform apply, so we can't be
+#                   more specific without a two-step bootstrap).
 
 CI_POLICY=$(cat <<EOF
 {
@@ -105,6 +115,29 @@ CI_POLICY=$(cat <<EOF
         "lambda:WaitForFunctionUpdated"
       ],
       "Resource": "arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${APP_NAME}"
+    },
+    {
+      "Sid": "S3Frontend",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${APP_NAME}-frontend",
+        "arn:aws:s3:::${APP_NAME}-frontend/*"
+      ]
+    },
+    {
+      "Sid": "CloudFront",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateInvalidation",
+        "cloudfront:GetDistribution"
+      ],
+      "Resource": "arn:aws:cloudfront::${AWS_ACCOUNT_ID}:distribution/*"
     }
   ]
 }
@@ -194,11 +227,8 @@ echo "  AWS_REGION             = ${AWS_REGION}"
 echo "  ECR_REGISTRY           = ${ECR_URL}"
 echo "  LAMBDA_FUNCTION        = ${APP_NAME}"
 echo "  VITE_API_URL           = ${API_URL}"
-echo ""
-echo "  Also needed for Vercel deploy:"
-echo "  VERCEL_TOKEN           = (vercel.com → Settings → Tokens)"
-echo "  VERCEL_ORG_ID          = (vercel.com → Settings)"
-echo "  VERCEL_PROJECT_ID      = (your Vercel project settings)"
+echo "  FRONTEND_BUCKET        = $(terraform -chdir="${SCRIPT_DIR}/../terraform" output -raw frontend_bucket 2>/dev/null || echo "${APP_NAME}-frontend")"
+echo "  CF_DISTRIBUTION_ID     = $(terraform -chdir="${SCRIPT_DIR}/../terraform" output -raw cloudfront_distribution_id 2>/dev/null || echo "(run make tf-apply first)")"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ⚠️  Save the secret key above — it cannot be retrieved again."

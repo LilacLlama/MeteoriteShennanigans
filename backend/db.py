@@ -3,9 +3,10 @@ DuckDB in-process database layer.
 Loads the NASA meteorite CSV once at startup into an in-memory DuckDB instance.
 """
 
-import os
-import duckdb
 import logging
+import os
+
+import duckdb
 
 logger = logging.getLogger(__name__)
 

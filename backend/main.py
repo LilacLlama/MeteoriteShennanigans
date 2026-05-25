@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import get_conn, get_all_points, query
+from db import get_all_points, get_conn, query
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
