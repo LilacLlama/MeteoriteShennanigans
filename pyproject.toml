@@ -1,0 +1,24 @@
+[tool.ruff]
+src = ["backend"]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "B008",  # do not perform function calls in default args (FastAPI depends on this)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["db", "agent", "main"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
