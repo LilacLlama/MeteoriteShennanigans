@@ -18,7 +18,8 @@
 │  Function URL (streaming mode)   │   │  → calls Lambda URL        │
 └──────────────────────────────────┘   └────────────────────────────┘
 
-Infrastructure state managed by Terraform (S3 backend + DynamoDB locks).
+Infrastructure state is local — run `make tf-apply` from your machine.
+Upgrade to S3 backend + DynamoDB locks when CI or multiple people need to apply.
 ```
 
 ---
@@ -67,8 +68,9 @@ All AWS resources are managed by Terraform (`terraform/`):
 | `aws_lambda_function` | Container Lambda, 512MB, 30s timeout |
 | `aws_lambda_function_url` | Public HTTPS endpoint, `RESPONSE_STREAM` mode for SSE |
 
-**State backend:** S3 bucket + DynamoDB lock table, created once by
-`scripts/bootstrap.sh` before the first `terraform apply`.
+**State backend:** Local (`terraform.tfstate`, gitignored). Run `make tf-apply`
+from your machine when infrastructure changes. Upgrade to S3 + DynamoDB
+when multiple people or CI need to apply.
 
 **Deploy pattern:** `image_uri` on the Lambda is set to `:latest` by Terraform
 on first apply, then ignored (`lifecycle.ignore_changes`). Subsequent app
@@ -147,8 +149,7 @@ PR opened
   └── lint.yml        ruff (Python) + tsc (TypeScript) — must pass to merge
 
 terraform/** changed
-  ├── PR:   terraform plan  posted as PR comment
-  └── main: terraform apply
+  └── PR:   terraform plan posted as PR comment (apply locally with make tf-apply)
 
 backend/** or Dockerfile changed
   └── main: docker build → ECR push ($GITHUB_SHA + latest) → lambda update-function-code
@@ -175,7 +176,8 @@ No Docker needed locally. DuckDB loads the CSV from `./data/` at startup.
 
 ## What I'd do differently with more time
 
-1. **OIDC for GitHub Actions auth** — currently uses long-lived AWS access keys in GitHub secrets. Replacing with OIDC (`aws-actions/configure-aws-credentials` with role ARN) eliminates static credentials entirely.
+1. **Dev container** — getting started locally currently requires manually installing Python, Node, Docker, Terraform, and Python dependencies. A `.devcontainer/devcontainer.json` (VS Code) or `docker-compose.yml` for local dev would bundle all of that, so `git clone` + one command is all a new contributor needs.
+2. **OIDC for GitHub Actions auth** — currently uses long-lived AWS access keys in GitHub secrets. Replacing with OIDC (`aws-actions/configure-aws-credentials` with role ARN) eliminates static credentials entirely.
 2. **Map filters** — filter the 45k points by class, year range, mass, fell vs found directly in the UI rather than only via the agent.
 3. **DuckDB Quack for multi-user writes** — if the product grew to support user annotations, Quack becomes the right choice: a persistent DuckDB server handling concurrent writes, Lambda functions as stateless readers.
 4. **Streaming SQL display** — when the agent re-runs, show the SQL being written token-by-token rather than just "Querying database…". More transparent and a better demo of how the agent works.

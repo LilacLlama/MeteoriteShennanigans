@@ -16,7 +16,6 @@ help: ## Show available targets
 
 install: ## Install all dependencies (Python + Node)
 	pip install -r backend/requirements.txt
-	pip install ruff          # linter/formatter (dev only)
 	cd frontend && npm install
 
 # ── Local dev ─────────────────────────────────────────────────────────────────
@@ -50,7 +49,7 @@ build: ## Build the Docker image locally
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 
-bootstrap: ## One-time setup: S3 state, DynamoDB locks, ECR, first deploy
+bootstrap: ## One-time setup: ECR, IAM user, initial image push, terraform apply
 	./scripts/bootstrap.sh
 
 tf-plan: ## Preview infrastructure changes (terraform plan)

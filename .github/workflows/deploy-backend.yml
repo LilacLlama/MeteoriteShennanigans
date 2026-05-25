@@ -82,8 +82,7 @@ jobs:
 # ── Required GitHub secrets ──────────────────────────────────────────────────
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — IAM user needs:
 #   ecr:* on the repository
-#   lambda:UpdateFunctionCode + lambda:GetFunctionUrlConfig
-#   s3:GetObject + dynamodb:GetItem (to read Terraform state)
+#   lambda:UpdateFunctionCode + lambda:GetFunctionUrlConfig + lambda:WaitForFunctionUpdated
+#   s3:GetObject on the Terraform state bucket (to read outputs)
 #
-# Lambda execution role needs (managed by Terraform):
-#   bedrock:InvokeModel + bedrock:InvokeModelWithResponseStream
+# Lambda execution role permissions are managed by Terraform (terraform/lambda.tf)

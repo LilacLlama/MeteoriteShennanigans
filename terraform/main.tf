@@ -8,14 +8,8 @@ terraform {
     }
   }
 
-  # S3 backend — bucket and DynamoDB table created by scripts/bootstrap.sh
-  backend "s3" {
-    bucket         = "meteorite-explorer-terraform-state"
-    key            = "terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "meteorite-explorer-terraform-locks"
-    encrypt        = true
-  }
+  # Local state — run terraform apply from your machine.
+  # Upgrade to S3 backend or Terraform Cloud when CI or multiple people need to apply.
 }
 
 provider "aws" {
