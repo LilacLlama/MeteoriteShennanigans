@@ -2,10 +2,10 @@
 # bootstrap.sh — one-time setup to get AWS infrastructure ready.
 #
 # What this does:
-#   1. Creates the ECR repository
-#   2. Creates the GitHub Actions IAM user + access keys
-#   3. Builds and pushes an initial Docker image (Lambda needs one to exist)
-#   4. Runs terraform init + apply to provision Lambda, IAM role, Function URL
+#   1. Creates the ECR repository (targeted terraform apply)
+#   2. Builds and pushes an initial Docker image (Lambda needs one to exist)
+#   3. Runs full terraform apply — Lambda, IAM roles, CI user + policy, S3, CloudFront
+#   4. Creates the GitHub Actions IAM access key (CLI only — secret not stored in state)
 #   5. Prints the GitHub secrets you need to set
 #
 # Terraform state is local — run this (and future `terraform apply`) from your machine.
@@ -65,129 +65,7 @@ terraform init -input=false
 terraform apply -target=aws_ecr_repository.api -auto-approve
 cd "${SCRIPT_DIR}/.."
 
-# ── 2. GitHub Actions IAM user ───────────────────────────────────────────────
-# Creates a dedicated IAM user for CI rather than reusing personal credentials.
-#
-# Access keys are created once; the secret is only visible at creation time
-# (AWS will not return it again), so bootstrap prints it at the end for you
-# to copy into GitHub secrets. If you lose it, delete the key and re-run.
-echo "==> Creating IAM user: ${CI_USER}"
-
-# Least-privilege policy for the GitHub Actions CI user.
-# Five statements, each scoped as tightly as AWS allows:
-#
-#   ECRAuth       — GetAuthorizationToken is account-level; AWS does not support
-#                   resource restrictions on this action, so Resource: * is
-#                   required. It only produces a temporary docker login password.
-#
-#   ECRRepository — Push/pull actions for the one ECR repository used by this
-#                   app. Scoped to the repository ARN so the CI user cannot
-#                   read or write any other registry in the account.
-#
-#   Lambda        — Minimum actions to deploy a new container image and verify
-#                   it went live. Scoped to the single Lambda function ARN.
-#
-#   S3Frontend    — Read/write access to the frontend S3 bucket only.
-#                   The bucket name is predictable from APP_NAME so we can
-#                   scope it here before Terraform runs.
-#
-#   CloudFront    — CreateInvalidation to bust the CDN cache after each deploy.
-#                   GetDistribution to read the domain name for the job summary.
-#                   Scoped to all distributions in the account (the distribution
-#                   ID isn't known until after terraform apply, so we can't be
-#                   more specific without a two-step bootstrap).
-
-CI_POLICY=$(cat <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ECRAuth",
-      "Effect": "Allow",
-      "Action": ["ecr:GetAuthorizationToken"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ECRRepository",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload",
-        "ecr:PutImage"
-      ],
-      "Resource": "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/${APP_NAME}"
-    },
-    {
-      "Sid": "Lambda",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:UpdateFunctionCode",
-        "lambda:GetFunction",
-        "lambda:GetFunctionUrlConfig",
-        "lambda:WaitForFunctionUpdated"
-      ],
-      "Resource": "arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${APP_NAME}"
-    },
-    {
-      "Sid": "S3Frontend",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::${APP_NAME}-frontend-${AWS_REGION}",
-        "arn:aws:s3:::${APP_NAME}-frontend-${AWS_REGION}/*"
-      ]
-    },
-    {
-      "Sid": "CloudFront",
-      "Effect": "Allow",
-      "Action": [
-        "cloudfront:CreateInvalidation",
-        "cloudfront:GetDistribution"
-      ],
-      "Resource": "arn:aws:cloudfront::${AWS_ACCOUNT_ID}:distribution/*"
-    }
-  ]
-}
-EOF
-)
-
-if aws iam get-user --user-name "${CI_USER}" >/dev/null 2>&1; then
-  echo "    (user already exists, skipping creation)"
-else
-  aws iam create-user --user-name "${CI_USER}"
-fi
-
-aws iam put-user-policy \
-  --user-name "${CI_USER}" \
-  --policy-name "${APP_NAME}-ci-policy" \
-  --policy-document "${CI_POLICY}"
-echo "    Policy attached."
-
-KEY_COUNT=$(aws iam list-access-keys --user-name "${CI_USER}" \
-  --query 'length(AccessKeyMetadata)' --output text)
-
-if [ "${KEY_COUNT}" -gt 0 ]; then
-  echo "    Access key already exists — skipping."
-  echo "    (To rotate: aws iam delete-access-key --user-name ${CI_USER} --access-key-id <ID>)"
-  CI_KEY_ID="(existing — check AWS console)"
-  CI_KEY_SECRET="(existing — not retrievable)"
-else
-  KEY_OUTPUT=$(aws iam create-access-key --user-name "${CI_USER}")
-  CI_KEY_ID=$(echo "${KEY_OUTPUT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['AccessKey']['AccessKeyId'])")
-  CI_KEY_SECRET=$(echo "${KEY_OUTPUT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['AccessKey']['SecretAccessKey'])")
-  echo "    Access key created."
-fi
-
-# ── 3. Build & push initial image ────────────────────────────────────────────
+# ── 2. Build & push initial image ────────────────────────────────────────────
 # Lambda requires an image to already exist in ECR at the time Terraform creates
 # the function — it won't create a Lambda pointing at an empty registry.
 #
@@ -212,10 +90,11 @@ docker build --platform linux/amd64 --provenance=false -t "${ECR_URL}:latest" "$
 docker push "${ECR_URL}:latest"
 echo "    Done."
 
-# ── 4. Terraform init + apply ────────────────────────────────────────────────
-# Provisions all remaining AWS resources declared in terraform/:
-#   - IAM execution role for Lambda (separate from the CI user above)
-#   - Lambda function pointed at the ECR image pushed in step 3
+# ── 3. Terraform init + apply ────────────────────────────────────────────────
+# Provisions all AWS resources declared in terraform/:
+#   - CI IAM user + least-privilege policy (terraform/iam_ci.tf)
+#   - IAM execution role for Lambda
+#   - Lambda function pointed at the ECR image pushed in step 2
 #   - Lambda Function URL (public HTTPS endpoint, RESPONSE_STREAM mode for SSE)
 #   - S3 bucket + CloudFront distribution for the frontend
 # State is stored locally in terraform/terraform.tfstate — run make tf-apply
@@ -226,6 +105,25 @@ terraform init -input=false
 terraform apply -auto-approve
 
 API_URL=$(terraform output -raw api_url)
+
+# ── 4. GitHub Actions access key ─────────────────────────────────────────────
+# The CI IAM user is created by Terraform above. We create its access key here
+# via CLI because Terraform would store the secret in state (plaintext).
+# The secret is only shown once — save it to GitHub secrets immediately.
+KEY_COUNT=$(aws iam list-access-keys --user-name "${CI_USER}" \
+  --query 'length(AccessKeyMetadata)' --output text)
+
+if [ "${KEY_COUNT}" -gt 0 ]; then
+  echo "    Access key already exists — skipping."
+  echo "    (To rotate: aws iam delete-access-key --user-name ${CI_USER} --access-key-id <ID>)"
+  CI_KEY_ID="(existing — check AWS console)"
+  CI_KEY_SECRET="(existing — not retrievable)"
+else
+  KEY_OUTPUT=$(aws iam create-access-key --user-name "${CI_USER}")
+  CI_KEY_ID=$(echo "${KEY_OUTPUT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['AccessKey']['AccessKeyId'])")
+  CI_KEY_SECRET=$(echo "${KEY_OUTPUT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['AccessKey']['SecretAccessKey'])")
+  echo "    Access key created."
+fi
 
 # ── 5. Print secrets summary ─────────────────────────────────────────────────
 # Prints all values you need to add as GitHub Actions secrets.

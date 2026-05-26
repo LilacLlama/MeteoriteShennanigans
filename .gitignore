@@ -223,6 +223,7 @@ __marimo__/
 *.tfplan
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 terraform.tfvars
 
 # Node / frontend
