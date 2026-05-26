@@ -1,0 +1,99 @@
+name: Deploy Backend → Lambda
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "data/**"
+      - "Dockerfile"
+      - ".github/workflows/deploy-backend.yml"
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS Credentials ─────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Infra values ────────────────────────────────────────────────────────
+      # Terraform state is local — CI has no access to it.
+      # ECR_REGISTRY and LAMBDA_FUNCTION are set as GitHub Actions repository
+      # variables (Repo → Settings → Variables → Actions) after running
+      # `make bootstrap` or `make tf-apply` locally.
+      - name: Load infra variables
+        run: |
+          echo "ECR_REGISTRY=${{ vars.ECR_REGISTRY }}" >> $GITHUB_ENV
+          echo "LAMBDA_FUNCTION=${{ vars.LAMBDA_FUNCTION }}" >> $GITHUB_ENV
+
+      # ── ECR Login ───────────────────────────────────────────────────────────
+      # Two logins: ECR Public (pull LWA base image) + ECR Private (push built image).
+      # ECR Public auth must always target us-east-1 — this is an AWS constraint
+      # unrelated to the region we deploy to.
+      - name: Login to Amazon ECR Public (Lambda Web Adapter base image)
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR Private
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build & Push ─────────────────────────────────────────────────────────
+      - name: Build, tag, and push image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --provenance=false \
+            -t $ECR_REGISTRY:$GITHUB_SHA \
+            -t $ECR_REGISTRY:latest \
+            .
+          docker push $ECR_REGISTRY:$GITHUB_SHA
+          docker push $ECR_REGISTRY:latest
+
+      # ── Update Lambda ────────────────────────────────────────────────────────
+      - name: Deploy to Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION \
+            --image-uri $ECR_REGISTRY:$GITHUB_SHA
+
+          aws lambda wait function-updated \
+            --function-name $LAMBDA_FUNCTION
+
+      # ── Summary ──────────────────────────────────────────────────────────────
+      - name: Job summary
+        run: |
+          URL=$(aws lambda get-function-url-config \
+            --function-name $LAMBDA_FUNCTION \
+            --query FunctionUrl --output text)
+          echo "🚀 Deployed \`$GITHUB_SHA\` → $URL" >> $GITHUB_STEP_SUMMARY
+
+# ── Required GitHub configuration ───────────────────────────────────────────
+# Secrets (Repo → Settings → Secrets and variables → Actions → Secrets):
+#   AWS_ACCESS_KEY_ID      — CI IAM user (created by scripts/bootstrap.sh)
+#   AWS_SECRET_ACCESS_KEY  — CI IAM user secret
+#
+# Variables (Repo → Settings → Secrets and variables → Actions → Variables):
+#   AWS_REGION        — e.g. us-east-2 (defaults to us-east-2 if unset)
+#   ECR_REGISTRY      — full ECR URL, e.g. 123456789.dkr.ecr.us-east-2.amazonaws.com/meteorite-explorer
+#   LAMBDA_FUNCTION   — Lambda function name, e.g. meteorite-explorer
+#
+# ECR_REGISTRY and LAMBDA_FUNCTION are printed by `make bootstrap` after
+# terraform apply. Terraform state is local; CI reads these vars instead.
+#
+# Lambda execution role permissions are managed by Terraform (terraform/lambda.tf)

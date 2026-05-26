@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in your values before running bootstrap.sh
+# or any terraform commands directly (make tf-plan / make tf-apply).
+
+# S3 frontend bucket will be named: <app_name>-frontend-<aws_region>
+# e.g. meteorite-explorer-frontend-us-east-2
+aws_region = "us-east-2"
+app_name   = "meteorite-explorer"

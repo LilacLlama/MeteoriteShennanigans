@@ -1,0 +1,7 @@
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+duckdb==1.5.3
+pydantic==2.13.4
+
+# Dev / CI
+ruff==0.15.14
