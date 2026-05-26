@@ -64,6 +64,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+
+  useEffect(() => {
     if (magnets.length === 0) {
       setYieldResult(null);
       setYieldLoading(false);
@@ -199,7 +208,7 @@ export default function App() {
         {/* Mobile-only: arsenal toggle button. Desktop has the sidebar pinned. */}
         <button
           onClick={() => setSidebarOpen((o) => !o)}
-          className="lg:hidden absolute top-4 right-4 z-[1500] bg-gray-900/95 backdrop-blur text-white px-3 py-2 rounded-lg shadow-lg border border-gray-700 text-sm font-medium"
+          className="lg:hidden absolute top-4 right-4 z-toggle bg-gray-900/95 backdrop-blur text-white px-4 py-3 min-h-[44px] min-w-[44px] rounded-lg shadow-lg border border-gray-700 text-base font-medium"
           aria-label="Toggle magnet arsenal"
         >
           {sidebarOpen ? "✕" : `☄️ Magnets${magnets.length ? ` (${magnets.length})` : ""}`}
@@ -210,13 +219,14 @@ export default function App() {
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/40 z-[1300]"
+          className="lg:hidden fixed inset-0 bg-black/40 z-backdrop"
+          aria-hidden="true"
         />
       )}
 
       <aside
         className={`
-          fixed lg:relative inset-y-0 right-0 z-[1400]
+          fixed lg:relative inset-y-0 right-0 z-sidebar
           w-80 max-w-[85vw]
           bg-gray-900 border-l border-gray-800 flex flex-col text-gray-200
           transition-transform duration-200 ease-out

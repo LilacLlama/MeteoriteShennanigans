@@ -68,6 +68,42 @@ export default function Map({
   onPlaceMagnet,
   onRemoveMagnet,
 }: Props) {
+  // Memoised so adding/removing magnets doesn't re-cluster the 38k meteorites.
+  // `onSelect` is assumed stable (useCallback in App.tsx) — if upstream drops
+  // that, every magnet placement will re-cluster again.
+  const clusterLayer = useMemo(
+    () => (
+      <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
+        {points.map((m) => (
+          <CircleMarker
+            key={m.id}
+            center={[m.reclat, m.reclong]}
+            radius={selectedId === m.id ? 8 : 4}
+            pathOptions={{
+              color: markerColor(m.fall),
+              fillColor: markerColor(m.fall),
+              fillOpacity: selectedId === m.id ? 1 : 0.7,
+              weight: selectedId === m.id ? 2 : 0,
+            }}
+            eventHandlers={{ click: () => onSelect(m) }}
+          >
+            <Popup>
+              <div className="text-sm font-sans">
+                <p className="font-bold text-gray-900">{m.name}</p>
+                <p className="text-gray-600">{m.recclass ?? "Unknown class"}</p>
+                <p className="text-gray-600">{massLabel(m.mass_g)}</p>
+                <p className="text-gray-600">
+                  {m.year ?? "Year unknown"} · {m.fall}
+                </p>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
+      </MarkerClusterGroup>
+    ),
+    [points, selectedId, onSelect],
+  );
+
   return (
     <MapContainer
       center={[20, 0]}
@@ -85,38 +121,7 @@ export default function Map({
       <FlyTo points={points} selectedId={selectedId} />
       <ClickHandler onPlace={onPlaceMagnet} />
 
-      {useMemo(
-        () => (
-          <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
-            {points.map((m) => (
-              <CircleMarker
-                key={m.id}
-                center={[m.reclat, m.reclong]}
-                radius={selectedId === m.id ? 8 : 4}
-                pathOptions={{
-                  color: markerColor(m.fall),
-                  fillColor: markerColor(m.fall),
-                  fillOpacity: selectedId === m.id ? 1 : 0.7,
-                  weight: selectedId === m.id ? 2 : 0,
-                }}
-                eventHandlers={{ click: () => onSelect(m) }}
-              >
-                <Popup>
-                  <div className="text-sm font-sans">
-                    <p className="font-bold text-gray-900">{m.name}</p>
-                    <p className="text-gray-600">{m.recclass ?? "Unknown class"}</p>
-                    <p className="text-gray-600">{massLabel(m.mass_g)}</p>
-                    <p className="text-gray-600">
-                      {m.year ?? "Year unknown"} · {m.fall}
-                    </p>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MarkerClusterGroup>
-        ),
-        [points, selectedId, onSelect],
-      )}
+      {clusterLayer}
 
       {magnets.map((mag) => (
         <Circle
