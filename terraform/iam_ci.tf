@@ -51,14 +51,17 @@ resource "aws_iam_user_policy" "ci" {
       },
 
       # Lambda — minimum actions to deploy a new image and confirm it went live.
+      # GetFunctionConfiguration is what `aws lambda wait function-updated` polls
+      # internally — it is a separate IAM action from GetFunction.
+      # WaitForFunctionUpdated is not a real IAM action; removed.
       {
         Sid    = "Lambda"
         Effect = "Allow"
         Action = [
           "lambda:UpdateFunctionCode",
           "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
           "lambda:GetFunctionUrlConfig",
-          "lambda:WaitForFunctionUpdated",
         ]
         Resource = aws_lambda_function.api.arn
       },
