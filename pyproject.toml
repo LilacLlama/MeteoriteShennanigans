@@ -1,3 +1,4 @@
+# Install locally: pip install -r backend/requirements-dev.txt
 [tool.ruff]
 src = ["backend"]
 line-length = 100

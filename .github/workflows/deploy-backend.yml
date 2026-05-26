@@ -9,6 +9,10 @@ on:
       - "Dockerfile"
       - ".github/workflows/deploy-backend.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
 
@@ -16,6 +20,8 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read   # only need to read the repo; AWS ops use explicit credentials
 
     steps:
       # ── Checkout ────────────────────────────────────────────────────────────
@@ -58,27 +64,27 @@ jobs:
           docker build \
             --platform linux/amd64 \
             --provenance=false \
-            -t $ECR_REGISTRY:$GITHUB_SHA \
-            -t $ECR_REGISTRY:latest \
+            -t "$ECR_REGISTRY:$GITHUB_SHA" \
+            -t "$ECR_REGISTRY:latest" \
             .
-          docker push $ECR_REGISTRY:$GITHUB_SHA
-          docker push $ECR_REGISTRY:latest
+          docker push "$ECR_REGISTRY:$GITHUB_SHA"
+          docker push "$ECR_REGISTRY:latest"
 
       # ── Update Lambda ────────────────────────────────────────────────────────
       - name: Deploy to Lambda
         run: |
           aws lambda update-function-code \
-            --function-name $LAMBDA_FUNCTION \
-            --image-uri $ECR_REGISTRY:$GITHUB_SHA
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$ECR_REGISTRY:$GITHUB_SHA"
 
           aws lambda wait function-updated \
-            --function-name $LAMBDA_FUNCTION
+            --function-name "$LAMBDA_FUNCTION"
 
       # ── Summary ──────────────────────────────────────────────────────────────
       - name: Job summary
         run: |
           URL=$(aws lambda get-function-url-config \
-            --function-name $LAMBDA_FUNCTION \
+            --function-name "$LAMBDA_FUNCTION" \
             --query FunctionUrl --output text)
           echo "🚀 Deployed \`$GITHUB_SHA\` → $URL" >> $GITHUB_STEP_SUMMARY
 
