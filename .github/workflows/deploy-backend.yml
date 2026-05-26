@@ -8,6 +8,7 @@ on:
       - "data/**"
       - "Dockerfile"
       - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:  # allow manual runs from the Actions tab
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
