@@ -1,7 +1,5 @@
-# Copy to terraform.tfvars and fill in your values.
-# bootstrap.sh generates this file automatically from .env — you only need
-# to create it manually if you're running terraform commands directly
-# (e.g. make tf-plan / make tf-apply) without going through bootstrap.
+# Copy to terraform.tfvars and fill in your values before running bootstrap.sh
+# or any terraform commands directly (make tf-plan / make tf-apply).
 
 # S3 frontend bucket will be named: <app_name>-frontend-<aws_region>
 # e.g. meteorite-explorer-frontend-us-east-2
