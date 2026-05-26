@@ -3,19 +3,24 @@ import {
   MapContainer,
   TileLayer,
   CircleMarker,
+  Circle,
   Popup,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
-import type { MeteoritePoint } from "../types";
+import type { Magnet, MagnetRadiiKm, MeteoritePoint } from "../types";
 
 interface Props {
   points: MeteoritePoint[];
   selectedId: number | null;
   onSelect: (m: MeteoritePoint) => void;
+  magnets: Magnet[];
+  radii: MagnetRadiiKm;
+  onPlaceMagnet: (lat: number, lon: number) => void;
+  onRemoveMagnet: (id: string) => void;
 }
 
-// Fly to selected meteorite when selectedId changes
 function FlyTo({
   points,
   selectedId,
@@ -34,6 +39,15 @@ function FlyTo({
   return null;
 }
 
+function ClickHandler({ onPlace }: { onPlace: (lat: number, lon: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onPlace(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
 function massLabel(g: number | null): string {
   if (g == null) return "Unknown mass";
   if (g >= 1_000_000) return `${(g / 1_000_000).toFixed(1)} t`;
@@ -42,10 +56,18 @@ function massLabel(g: number | null): string {
 }
 
 function markerColor(fall: string | null): string {
-  return fall === "Fell" ? "#f97316" : "#60a5fa"; // orange = witnessed, blue = found
+  return fall === "Fell" ? "#f97316" : "#60a5fa";
 }
 
-export default function Map({ points, selectedId, onSelect }: Props) {
+export default function Map({
+  points,
+  selectedId,
+  onSelect,
+  magnets,
+  radii,
+  onPlaceMagnet,
+  onRemoveMagnet,
+}: Props) {
   return (
     <MapContainer
       center={[20, 0]}
@@ -60,6 +82,7 @@ export default function Map({ points, selectedId, onSelect }: Props) {
       />
 
       <FlyTo points={points} selectedId={selectedId} />
+      <ClickHandler onPlace={onPlaceMagnet} />
 
       <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
         {points.map((m) => (
@@ -88,6 +111,31 @@ export default function Map({ points, selectedId, onSelect }: Props) {
           </CircleMarker>
         ))}
       </MarkerClusterGroup>
+
+      {magnets.map((mag) => (
+        <Circle
+          key={mag.id}
+          center={[mag.lat, mag.lon]}
+          radius={radii[mag.size] * 1000}
+          pathOptions={{
+            color: "#ec4899",
+            fillColor: "#ec4899",
+            fillOpacity: 0.18,
+            weight: 2,
+          }}
+          eventHandlers={{ click: () => onRemoveMagnet(mag.id) }}
+        >
+          <Popup>
+            <div className="text-sm font-sans">
+              <p className="font-bold text-gray-900">Magnet ({mag.size})</p>
+              <p className="text-gray-600">Radius: {radii[mag.size]} km</p>
+              <p className="text-gray-500 italic text-xs mt-1">
+                Click again to remove
+              </p>
+            </div>
+          </Popup>
+        </Circle>
+      ))}
     </MapContainer>
   );
 }

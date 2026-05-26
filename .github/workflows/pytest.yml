@@ -1,0 +1,45 @@
+name: Backend Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+            dbt/requirements.txt
+
+      - name: Install backend, dev, and dbt deps
+        run: |
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-dev.txt
+          pip install -r dbt/requirements.txt
+
+      # Pytest needs data/meteorites.duckdb. It's gitignored, so we build it
+      # here. `dbt build` runs the dbt tests too — they have to pass before
+      # the warehouse can be consumed by pytest.
+      - name: Build warehouse
+        working-directory: dbt
+        run: dbt deps && dbt build
+
+      - name: Run pytest
+        run: pytest -v

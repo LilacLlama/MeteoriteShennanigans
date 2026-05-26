@@ -231,3 +231,14 @@ node_modules/
 dist/
 frontend/.env
 frontend/.env.local
+
+# dbt
+dbt/.venv/
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Built warehouse (produced by `dbt build`)
+data/meteorites.duckdb
+data/meteorites.duckdb.wal

@@ -1,0 +1,38 @@
+name: dbt Build & Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dbt:
+    name: dbt build (26 data tests)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: dbt
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: dbt/requirements.txt
+
+      - name: Install dbt
+        run: pip install -r requirements.txt
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: dbt build
+        run: dbt build
