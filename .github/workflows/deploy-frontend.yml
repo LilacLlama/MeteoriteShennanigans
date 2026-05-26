@@ -6,6 +6,11 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
@@ -14,6 +19,8 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read   # only need to read the repo; AWS ops use explicit credentials
     defaults:
       run:
         working-directory: frontend
