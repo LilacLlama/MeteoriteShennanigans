@@ -32,10 +32,11 @@ lint: ## Lint Python (ruff) and TypeScript (tsc --noEmit)
 	ruff check backend/
 	cd frontend && npx tsc --noEmit
 
-format: ## Auto-format Python (ruff) and TypeScript (prettier)
+format: ## Auto-format Python (ruff) and TypeScript (prettier), then type-check
 	ruff format backend/
 	ruff check --fix backend/
 	cd frontend && npx prettier --write "src/**/*.{ts,tsx}"
+	cd frontend && npx tsc --noEmit
 
 check: ## Lint + format-check without modifying files (used in CI)
 	ruff check backend/

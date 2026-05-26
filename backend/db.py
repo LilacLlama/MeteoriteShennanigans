@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 _conn: duckdb.DuckDBPyConnection | None = None
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "Meteorite_Landings.csv")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "Meteorite_Landings.csv")
 
 
 def get_conn() -> duckdb.DuckDBPyConnection:
