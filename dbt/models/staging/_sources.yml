@@ -1,0 +1,36 @@
+version: 2
+
+sources:
+  - name: nasa
+    description: |
+      NASA's Meteorite Landings dataset — every recorded meteorite landing
+      on Earth, sourced from https://data.nasa.gov/dataset/meteorite-landings
+    tables:
+      - name: meteorite_landings
+        description: |
+          Raw CSV. One row per recorded meteorite. About 7k of the 45,716 rows
+          have null coordinates — those are dropped in staging since a magnet
+          placement tool can't do anything with un-located rocks.
+        meta:
+          external_location: "read_csv_auto('{{ env_var('METEORITE_CSV_PATH', '../data/Meteorite_Landings.csv') }}', nullstr='')"
+        columns:
+          - name: id
+            description: NASA-assigned numeric identifier.
+          - name: name
+            description: Common name (typically the place the meteorite was found).
+          - name: nametype
+            description: "'Valid' for typical entries; 'Relict' for severely weathered or controversial finds."
+          - name: recclass
+            description: Petrologic classification (e.g. L5, H6, CM2, Iron, IIIAB).
+          - name: "mass (g)"
+            description: Mass in grams. Nullable.
+          - name: fall
+            description: "'Fell' if witnessed entering the atmosphere; 'Found' if recovered later."
+          - name: year
+            description: Year of fall or find.
+          - name: reclat
+            description: Latitude (decimal degrees).
+          - name: reclong
+            description: Longitude (decimal degrees).
+          - name: GeoLocation
+            description: Redundant text representation of (reclat, reclong). Dropped in staging.

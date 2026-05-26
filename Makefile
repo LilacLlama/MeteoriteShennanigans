@@ -1,4 +1,4 @@
-.PHONY: help install dev-backend dev-frontend lint format check build bootstrap tf-plan tf-apply
+.PHONY: help install dev-backend dev-frontend lint format check build bootstrap tf-plan tf-apply dbt-install dbt-build dbt-test dbt-clean
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 CYAN  := \033[36m
@@ -43,9 +43,24 @@ check: ## Lint + format-check without modifying files (used in CI)
 	ruff format --check backend/
 	cd frontend && npx tsc --noEmit
 
+# ── dbt warehouse ─────────────────────────────────────────────────────────────
+
+dbt-install: ## Install dbt-duckdb + h3 into the current venv
+	pip install -r dbt/requirements.txt
+
+dbt-build: ## Run dbt build — produces data/meteorites.duckdb and runs tests
+	cd dbt && dbt deps && dbt build
+
+dbt-test: ## Run dbt tests only (assumes warehouse already built)
+	cd dbt && dbt test
+
+dbt-clean: ## Delete the built warehouse and dbt artifacts
+	rm -f data/meteorites.duckdb data/meteorites.duckdb.wal
+	rm -rf dbt/target dbt/dbt_packages dbt/logs
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 
-build: ## Build the Docker image locally
+build: ## Build the Docker image locally (multi-stage: dbt build → runtime)
 	docker build -t meteorite-explorer:local .
 
 # ── Infrastructure ────────────────────────────────────────────────────────────

@@ -1,0 +1,13 @@
+meteorite_explorer:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', '../data/meteorites.duckdb') }}"
+      # `schema` here is dbt's default target schema. Models with no `+schema:`
+      # config land here; models in a folder with e.g. `+schema: marts` land in
+      # `main_marts` (dbt prefixes custom schemas with the target schema).
+      schema: main
+      threads: 4
+      extensions:
+        - httpfs

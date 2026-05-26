@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_meteorites
+    description: |
+      Cleaned and typed meteorite landings. One row per meteorite with valid
+      coordinates. `year_landed` is cast to integer (some raw values include
+      non-numeric strings; those become null via TRY_CAST). Rows missing or
+      out-of-range coordinates are dropped — the downstream product is a
+      placement tool, so un-mappable rows aren't useful.
+    columns:
+      - name: id
+        description: NASA identifier. Unique.
+        tests:
+          - not_null
+          - unique
+      - name: name
+        tests:
+          - not_null
+      - name: nametype
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Valid', 'Relict']
+      - name: fall
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Fell', 'Found']
+      - name: latitude
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -90
+                max_value: 90
+      - name: longitude
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -180
+                max_value: 180
+      - name: mass_g
+        description: Mass in grams. Nullable.
+      - name: year_landed
+        description: Year of fall or find. Nullable. Constrained to [860, 2025] in staging.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 860
+                max_value: 2025

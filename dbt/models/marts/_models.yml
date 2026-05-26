@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: meteorites
+    description: |
+      Final fact table — one row per meteorite with valid coordinates.
+      Served directly by `/api/meteorites` and used as the source for raw-point
+      spatial queries (the magnet yield endpoint does a haversine filter here).
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: latitude
+        tests:
+          - not_null
+      - name: longitude
+        tests:
+          - not_null
+
+  - name: meteorites_by_h3
+    description: |
+      Meteorites bucketed into H3 hexagonal cells (resolution 3). One row per
+      occupied cell. Drives the density heatmap. Includes cell centroids so the
+      frontend doesn't need an H3 library client-side.
+    columns:
+      - name: h3_cell
+        tests:
+          - not_null
+          - unique
+      - name: count
+        tests:
+          - not_null
+
+  - name: meteorites_by_class
+    description: Aggregate by petrologic classification.
+    columns:
+      - name: recclass
+        tests:
+          - not_null
+          - unique
+
+  - name: meteorites_by_decade
+    description: Aggregate by decade. Surfaces the post-1980 Antarctic discovery boom.
+    columns:
+      - name: decade
+        tests:
+          - not_null
+          - unique
