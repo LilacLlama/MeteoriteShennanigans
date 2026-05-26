@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -68,22 +68,11 @@ export default function Map({
   onPlaceMagnet,
   onRemoveMagnet,
 }: Props) {
-  return (
-    <MapContainer
-      center={[20, 0]}
-      zoom={2}
-      minZoom={2}
-      maxZoom={14}
-      className="h-full w-full"
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-      />
-
-      <FlyTo points={points} selectedId={selectedId} />
-      <ClickHandler onPlace={onPlaceMagnet} />
-
+  // Memoised so adding/removing magnets doesn't re-cluster the 38k meteorites.
+  // `onSelect` is assumed stable (useCallback in App.tsx) — if upstream drops
+  // that, every magnet placement will re-cluster again.
+  const clusterLayer = useMemo(
+    () => (
       <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
         {points.map((m) => (
           <CircleMarker
@@ -111,6 +100,28 @@ export default function Map({
           </CircleMarker>
         ))}
       </MarkerClusterGroup>
+    ),
+    [points, selectedId, onSelect],
+  );
+
+  return (
+    <MapContainer
+      center={[20, 0]}
+      zoom={2}
+      minZoom={2}
+      maxZoom={14}
+      preferCanvas={true}
+      className="h-full w-full"
+    >
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+      />
+
+      <FlyTo points={points} selectedId={selectedId} />
+      <ClickHandler onPlace={onPlaceMagnet} />
+
+      {clusterLayer}
 
       {magnets.map((mag) => (
         <Circle

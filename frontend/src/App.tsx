@@ -35,6 +35,7 @@ export default function App() {
   const [yieldResult, setYieldResult] = useState<YieldResult | null>(null);
   const [yieldLoading, setYieldLoading] = useState(false);
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/meteorites`)
@@ -61,6 +62,15 @@ export default function App() {
         // so the UI keeps working even if the config endpoint is unreachable.
       });
   }, []);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (magnets.length === 0) {
@@ -194,9 +204,35 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Mobile-only: arsenal toggle button. Desktop has the sidebar pinned. */}
+        <button
+          onClick={() => setSidebarOpen((o) => !o)}
+          className="lg:hidden absolute top-4 right-4 z-toggle bg-gray-900/95 backdrop-blur text-white px-4 py-3 min-h-[44px] min-w-[44px] rounded-lg shadow-lg border border-gray-700 text-base font-medium"
+          aria-label="Toggle magnet arsenal"
+        >
+          {sidebarOpen ? "✕" : `☄️ Magnets${magnets.length ? ` (${magnets.length})` : ""}`}
+        </button>
       </div>
 
-      <aside className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col text-gray-200">
+      {/* Mobile-only: tap-outside backdrop to close the sidebar. */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="lg:hidden fixed inset-0 bg-black/40 z-backdrop"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`
+          fixed lg:relative inset-y-0 right-0 z-sidebar
+          w-80 max-w-[85vw]
+          bg-gray-900 border-l border-gray-800 flex flex-col text-gray-200
+          transition-transform duration-200 ease-out
+          ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}
+        `}
+      >
         <header className="p-5 border-b border-gray-800">
           <h1 className="font-semibold text-lg flex items-center gap-2">
             <span>☄️</span> Magnet Arsenal
