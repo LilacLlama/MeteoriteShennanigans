@@ -30,8 +30,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY backend/ ./
 
-# Bundle the NASA dataset so Lambda has it without any S3 dependency
-COPY data/Meteorite_Landings.csv ./data/Meteorite_Landings.csv
+# Bundle the NASA dataset so Lambda has it without any S3 dependency.
+# Copied to /data/ (outside WORKDIR /app) so the path resolves the same way
+# as in local dev: db.py is one level deep, ../data/ points to /data/ here
+# and to the repo-root data/ directory locally.
+COPY data/Meteorite_Landings.csv /data/Meteorite_Landings.csv
 
 # LWA starts uvicorn for us when Lambda invokes the container
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
