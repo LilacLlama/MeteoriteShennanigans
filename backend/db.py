@@ -158,7 +158,6 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
             "year_range": [summary_row[2], summary_row[3]],
         },
         "by_class": [
-            {"recclass": r[0], "count": r[1], "total_mass_g": float(r[2])}
-            for r in by_class_rows
+            {"recclass": r[0], "count": r[1], "total_mass_g": float(r[2])} for r in by_class_rows
         ],
     }
