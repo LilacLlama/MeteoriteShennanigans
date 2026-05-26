@@ -2,6 +2,7 @@
 FastAPI application — Meteorite Explorer backend.
 
 Endpoints:
+  GET  /api/config            — shared client/server constants (magnet radii)
   GET  /api/meteorites        — all map points (id, name, lat, lon, class, mass, year, fall)
   GET  /api/meteorites/{id}   — single meteorite detail
   GET  /api/heatmap           — H3 cell density grid for the heatmap layer
@@ -43,6 +44,12 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def config():
+    """Constants the frontend needs that originate on the server."""
+    return {"magnet_radii_km": MAGNET_RADII_KM}
 
 
 @app.get("/api/meteorites")

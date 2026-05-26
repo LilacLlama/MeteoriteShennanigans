@@ -1,4 +1,4 @@
-.PHONY: help install dev-backend dev-frontend lint format check build bootstrap tf-plan tf-apply dbt-install dbt-build dbt-test dbt-clean
+.PHONY: help install dev-backend dev-frontend lint format check build bootstrap tf-plan tf-apply dbt-install dbt-build dbt-test dbt-clean test
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 CYAN  := \033[36m
@@ -42,6 +42,9 @@ check: ## Lint + format-check without modifying files (used in CI)
 	ruff check backend/
 	ruff format --check backend/
 	cd frontend && npx tsc --noEmit
+
+test: ## Run backend pytest suite (requires data/meteorites.duckdb — run dbt-build first)
+	pytest -v
 
 # ── dbt warehouse ─────────────────────────────────────────────────────────────
 

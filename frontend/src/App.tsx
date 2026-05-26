@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import Map from "./components/Map";
 import type {
+  AppConfig,
   Magnet,
+  MagnetRadiiKm,
   MagnetSize,
   MeteoritePoint,
   YieldResult,
 } from "./types";
-import { MAGNET_RADIUS_KM } from "./types";
+import { FALLBACK_MAGNET_RADII_KM } from "./constants";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
+const YIELD_DEBOUNCE_MS = 200;
 
 function massLabel(g: number | null): string {
   if (g == null) return "Unknown";
@@ -31,6 +34,7 @@ export default function App() {
   const [activeSize, setActiveSize] = useState<MagnetSize>("M");
   const [yieldResult, setYieldResult] = useState<YieldResult | null>(null);
   const [yieldLoading, setYieldLoading] = useState(false);
+  const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/meteorites`)
@@ -49,29 +53,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    fetch(`${API_BASE}/api/config`)
+      .then((r) => r.json())
+      .then((c: AppConfig) => setRadii(c.magnet_radii_km))
+      .catch(() => {
+        // Stay on FALLBACK_MAGNET_RADII_KM — values match the backend defaults
+        // so the UI keeps working even if the config endpoint is unreachable.
+      });
+  }, []);
+
+  useEffect(() => {
     if (magnets.length === 0) {
       setYieldResult(null);
+      setYieldLoading(false);
       return;
     }
     setYieldLoading(true);
     const ctrl = new AbortController();
-    fetch(`${API_BASE}/api/yield`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        magnets: magnets.map((m) => ({ lat: m.lat, lon: m.lon, size: m.size })),
-      }),
-      signal: ctrl.signal,
-    })
-      .then((r) => r.json())
-      .then((data: YieldResult) => {
-        setYieldResult(data);
-        setYieldLoading(false);
+    const timer = setTimeout(() => {
+      fetch(`${API_BASE}/api/yield`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          magnets: magnets.map((m) => ({ lat: m.lat, lon: m.lon, size: m.size })),
+        }),
+        signal: ctrl.signal,
       })
-      .catch((e) => {
-        if (e.name !== "AbortError") setYieldLoading(false);
-      });
-    return () => ctrl.abort();
+        .then((r) => r.json())
+        .then((data: YieldResult) => {
+          setYieldResult(data);
+          setYieldLoading(false);
+        })
+        .catch((e) => {
+          if (e.name !== "AbortError") setYieldLoading(false);
+        });
+    }, YIELD_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
   }, [magnets]);
 
   const handleSelect = useCallback((m: MeteoritePoint) => {
@@ -126,6 +146,7 @@ export default function App() {
             selectedId={selected?.id ?? null}
             onSelect={handleSelect}
             magnets={magnets}
+            radii={radii}
             onPlaceMagnet={handlePlaceMagnet}
             onRemoveMagnet={handleRemoveMagnet}
           />
@@ -202,7 +223,7 @@ export default function App() {
               >
                 <div>{size}</div>
                 <div className="text-[10px] opacity-70 font-normal">
-                  {MAGNET_RADIUS_KM[size]} km
+                  {radii[size]} km
                 </div>
               </button>
             ))}

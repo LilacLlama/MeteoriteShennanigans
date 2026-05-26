@@ -15,6 +15,8 @@ export interface MeteoriteDetail extends MeteoritePoint {
 
 export type MagnetSize = "S" | "M" | "L";
 
+export type MagnetRadiiKm = Record<MagnetSize, number>;
+
 export interface Magnet {
   id: string;
   lat: number;
@@ -22,12 +24,9 @@ export interface Magnet {
   size: MagnetSize;
 }
 
-// Must match MAGNET_RADII_KM in backend/db.py.
-export const MAGNET_RADIUS_KM: Record<MagnetSize, number> = {
-  S: 100,
-  M: 500,
-  L: 1500,
-};
+export interface AppConfig {
+  magnet_radii_km: MagnetRadiiKm;
+}
 
 export interface YieldClassRow {
   recclass: string;

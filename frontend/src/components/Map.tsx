@@ -9,14 +9,14 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
-import type { MeteoritePoint, Magnet } from "../types";
-import { MAGNET_RADIUS_KM } from "../types";
+import type { Magnet, MagnetRadiiKm, MeteoritePoint } from "../types";
 
 interface Props {
   points: MeteoritePoint[];
   selectedId: number | null;
   onSelect: (m: MeteoritePoint) => void;
   magnets: Magnet[];
+  radii: MagnetRadiiKm;
   onPlaceMagnet: (lat: number, lon: number) => void;
   onRemoveMagnet: (id: string) => void;
 }
@@ -64,6 +64,7 @@ export default function Map({
   selectedId,
   onSelect,
   magnets,
+  radii,
   onPlaceMagnet,
   onRemoveMagnet,
 }: Props) {
@@ -115,7 +116,7 @@ export default function Map({
         <Circle
           key={mag.id}
           center={[mag.lat, mag.lon]}
-          radius={MAGNET_RADIUS_KM[mag.size] * 1000}
+          radius={radii[mag.size] * 1000}
           pathOptions={{
             color: "#ec4899",
             fillColor: "#ec4899",
@@ -127,9 +128,7 @@ export default function Map({
           <Popup>
             <div className="text-sm font-sans">
               <p className="font-bold text-gray-900">Magnet ({mag.size})</p>
-              <p className="text-gray-600">
-                Radius: {MAGNET_RADIUS_KM[mag.size]} km
-              </p>
+              <p className="text-gray-600">Radius: {radii[mag.size]} km</p>
               <p className="text-gray-500 italic text-xs mt-1">
                 Click again to remove
               </p>

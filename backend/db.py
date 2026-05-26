@@ -100,6 +100,12 @@ _HAVERSINE_KM = """
 """
 
 
+EMPTY_YIELD = {
+    "summary": {"count": 0, "total_mass_g": 0.0, "year_range": [None, None]},
+    "by_class": [],
+}
+
+
 def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     """
     Compute the expected meteorite catch for a set of magnet placements.
@@ -111,53 +117,55 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     breakdown. Meteorites caught by overlapping magnets are counted once.
     """
     if not magnets:
-        return {
-            "summary": {"count": 0, "total_mass_g": 0.0, "year_range": [None, None]},
-            "by_class": [],
-        }
+        return EMPTY_YIELD
 
-    conn = get_conn()
-    # Numeric-only values; pydantic-validated at the route, so safe to inline.
-    magnet_values = ", ".join(f"({lat}, {lon}, {r})" for lat, lon, r in magnets)
+    lats = [lat for lat, _, _ in magnets]
+    lons = [lon for _, lon, _ in magnets]
+    radii = [r for _, _, r in magnets]
 
-    summary_row = conn.execute(f"""
-        WITH magnets(mlat, mlon, radius_km) AS (VALUES {magnet_values}),
-        caught AS (
-            SELECT DISTINCT m.id, m.mass_g, m.year_landed
-            FROM main_marts.meteorites m
-            CROSS JOIN magnets mag
-            WHERE {_HAVERSINE_KM} <= mag.radius_km
+    # One query, one scan: pull the deduplicated caught set, then aggregate in
+    # Python. Cheaper than two SQL passes and avoids any string-built SQL.
+    caught = (
+        get_conn()
+        .execute(
+            f"""
+        WITH magnets(mlat, mlon, radius_km) AS (
+            SELECT unnest(?), unnest(?), unnest(?)
         )
-        SELECT
-            COUNT(*),
-            COALESCE(SUM(mass_g), 0),
-            MIN(year_landed),
-            MAX(year_landed)
-        FROM caught
-    """).fetchone()
-
-    by_class_rows = conn.execute(f"""
-        WITH magnets(mlat, mlon, radius_km) AS (VALUES {magnet_values}),
-        caught AS (
-            SELECT DISTINCT m.id, m.recclass, m.mass_g
-            FROM main_marts.meteorites m
-            CROSS JOIN magnets mag
-            WHERE {_HAVERSINE_KM} <= mag.radius_km
+        SELECT DISTINCT m.id, m.recclass, m.mass_g, m.year_landed
+        FROM main_marts.meteorites m
+        CROSS JOIN magnets mag
+        WHERE {_HAVERSINE_KM} <= mag.radius_km
+        """,
+            [lats, lons, radii],
         )
-        SELECT recclass, COUNT(*), COALESCE(SUM(mass_g), 0)
-        FROM caught
-        GROUP BY recclass
-        ORDER BY COUNT(*) DESC
-        LIMIT 20
-    """).fetchall()
+        .fetchall()
+    )
+
+    if not caught:
+        return EMPTY_YIELD
+
+    total_mass = sum(mass for _, _, mass, _ in caught if mass is not None)
+    years = [year for _, _, _, year in caught if year is not None]
+    year_range = [min(years), max(years)] if years else [None, None]
+
+    by_class_agg: dict[str, list[float]] = {}
+    for _, recclass, mass, _ in caught:
+        agg = by_class_agg.setdefault(recclass, [0, 0.0])
+        agg[0] += 1
+        if mass is not None:
+            agg[1] += mass
+
+    by_class = sorted(
+        ({"recclass": c, "count": int(n), "total_mass_g": m} for c, (n, m) in by_class_agg.items()),
+        key=lambda row: -row["count"],
+    )[:20]
 
     return {
         "summary": {
-            "count": summary_row[0],
-            "total_mass_g": float(summary_row[1]),
-            "year_range": [summary_row[2], summary_row[3]],
+            "count": len(caught),
+            "total_mass_g": float(total_mass),
+            "year_range": year_range,
         },
-        "by_class": [
-            {"recclass": r[0], "count": r[1], "total_mass_g": float(r[2])} for r in by_class_rows
-        ],
+        "by_class": by_class,
     }

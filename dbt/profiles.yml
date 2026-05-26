@@ -9,5 +9,3 @@ meteorite_explorer:
       # `main_marts` (dbt prefixes custom schemas with the target schema).
       schema: main
       threads: 4
-      extensions:
-        - httpfs
