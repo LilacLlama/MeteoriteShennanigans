@@ -22,7 +22,7 @@
 # ── S3 bucket ─────────────────────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.app_name}-frontend"
+  bucket = "${var.app_name}-frontend-${var.aws_region}"
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {

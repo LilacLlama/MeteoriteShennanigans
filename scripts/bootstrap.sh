@@ -11,7 +11,8 @@
 # Terraform state is local — run this (and future `terraform apply`) from your machine.
 #
 # Run once from the repo root:
-#   cp .env.example .env   # edit values first
+#   cp terraform/terraform.tfvars.example terraform/terraform.tfvars  # edit values first
+#   cp .env.example .env                                               # for AWS creds
 #   chmod +x scripts/bootstrap.sh && ./scripts/bootstrap.sh
 #
 # Prerequisites: aws CLI configured, Docker running, terraform installed.
@@ -37,17 +38,32 @@ echo ""
 # ── 1. ECR repository ────────────────────────────────────────────────────────
 # ECR (Elastic Container Registry) is AWS's private Docker registry.
 # Lambda container images must be pulled from ECR — you cannot point a Lambda
-# at Docker Hub or any other public registry. The repository has to exist before
-# Terraform runs, because the Lambda resource references it by URL.
-# describe-repositories exits non-zero if the repo doesn't exist, which is
-# how we detect whether to create it (idempotent on re-runs).
-echo "==> Creating ECR repository: ${APP_NAME}"
-if aws ecr describe-repositories --repository-names "${APP_NAME}" >/dev/null 2>&1; then
-  echo "    (already exists, skipping)"
-else
-  aws ecr create-repository --repository-name "${APP_NAME}" --region "${AWS_REGION}"
-  echo "    Done."
-fi
+# at Docker Hub or any other public registry.
+# ECR must exist before we can push the Docker image, and the image must exist
+# before Terraform can create the Lambda function. This is a chicken-and-egg
+# problem solved by a targeted Terraform apply: create just the ECR repo first,
+# push the image, then run the full apply for everything else.
+#
+# Using Terraform (rather than aws ecr create-repository) keeps the repo tracked
+# in state so it's destroyed cleanly with terraform destroy.
+# terraform.tfvars must exist before we run Terraform — it sets aws_region and
+# app_name. We don't auto-generate it from .env so that infra values are
+# explicitly reviewed before any apply. Copy the example to get started:
+#   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+TFVARS="${SCRIPT_DIR}/../terraform/terraform.tfvars"
+[ -f "${TFVARS}" ] || {
+  echo "❌ terraform/terraform.tfvars not found."
+  echo "   Copy the example and fill it in:"
+  echo "   cp terraform/terraform.tfvars.example terraform/terraform.tfvars"
+  exit 1
+}
+echo "==> Using terraform/terraform.tfvars"
+
+echo "==> Creating ECR repository via Terraform"
+cd "${SCRIPT_DIR}/../terraform"
+terraform init -input=false
+terraform apply -target=aws_ecr_repository.api -auto-approve
+cd "${SCRIPT_DIR}/.."
 
 # ── 2. GitHub Actions IAM user ───────────────────────────────────────────────
 # Creates a dedicated IAM user for CI rather than reusing personal credentials.
@@ -126,8 +142,8 @@ CI_POLICY=$(cat <<EOF
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::${APP_NAME}-frontend",
-        "arn:aws:s3:::${APP_NAME}-frontend/*"
+        "arn:aws:s3:::${APP_NAME}-frontend-${AWS_REGION}",
+        "arn:aws:s3:::${APP_NAME}-frontend-${AWS_REGION}/*"
       ]
     },
     {
@@ -189,7 +205,10 @@ aws ecr get-login-password --region "${AWS_REGION}" \
   | docker login --username AWS --password-stdin "${ECR_URL}"
 
 echo "==> Building and pushing Docker image"
-docker build -t "${ECR_URL}:latest" "${SCRIPT_DIR}/.."
+# --provenance=false prevents Docker BuildKit from attaching attestation metadata,
+# which would produce an OCI manifest index instead of a plain Docker image manifest.
+# Lambda only supports the Docker manifest format — OCI indexes are rejected.
+docker build --platform linux/amd64 --provenance=false -t "${ECR_URL}:latest" "${SCRIPT_DIR}/.."
 docker push "${ECR_URL}:latest"
 echo "    Done."
 
@@ -198,10 +217,12 @@ echo "    Done."
 #   - IAM execution role for Lambda (separate from the CI user above)
 #   - Lambda function pointed at the ECR image pushed in step 3
 #   - Lambda Function URL (public HTTPS endpoint, RESPONSE_STREAM mode for SSE)
-# State is stored locally in terraform/terraform.tfstate
+#   - S3 bucket + CloudFront distribution for the frontend
+# State is stored locally in terraform/terraform.tfstate — run make tf-apply
+# from your machine for future infrastructure changes.
 echo "==> Running terraform"
 cd "${SCRIPT_DIR}/../terraform"
-terraform init
+terraform init -input=false
 terraform apply -auto-approve
 
 API_URL=$(terraform output -raw api_url)

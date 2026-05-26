@@ -8,7 +8,7 @@
 # ============================================================
 
 # Stage 1: pull in the Lambda Web Adapter binary
-FROM public.ecr.aws/awslabs/aws-lambda-web-adapter:latest AS adapter
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 AS adapter
 
 # Stage 2: our actual runtime
 FROM python:3.12-slim

@@ -1,6 +1,7 @@
 resource "aws_ecr_repository" "api" {
   name                 = var.app_name
   image_tag_mutability = "MUTABLE"
+  force_delete         = true # allows terraform destroy even when images exist
 
   image_scanning_configuration {
     scan_on_push = true
