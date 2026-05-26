@@ -1,5 +1,11 @@
 import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Popup,
+  useMap,
+} from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { MeteoritePoint } from "../types";
 
@@ -10,7 +16,13 @@ interface Props {
 }
 
 // Fly to selected meteorite when selectedId changes
-function FlyTo({ points, selectedId }: { points: MeteoritePoint[]; selectedId: number | null }) {
+function FlyTo({
+  points,
+  selectedId,
+}: {
+  points: MeteoritePoint[];
+  selectedId: number | null;
+}) {
   const map = useMap();
   useEffect(() => {
     if (selectedId == null) return;
@@ -49,10 +61,7 @@ export default function Map({ points, selectedId, onSelect }: Props) {
 
       <FlyTo points={points} selectedId={selectedId} />
 
-      <MarkerClusterGroup
-        chunkedLoading
-        maxClusterRadius={40}
-      >
+      <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
         {points.map((m) => (
           <CircleMarker
             key={m.id}
@@ -71,7 +80,9 @@ export default function Map({ points, selectedId, onSelect }: Props) {
                 <p className="font-bold text-gray-900">{m.name}</p>
                 <p className="text-gray-600">{m.recclass ?? "Unknown class"}</p>
                 <p className="text-gray-600">{massLabel(m.mass_g)}</p>
-                <p className="text-gray-600">{m.year ?? "Year unknown"} · {m.fall}</p>
+                <p className="text-gray-600">
+                  {m.year ?? "Year unknown"} · {m.fall}
+                </p>
               </div>
             </Popup>
           </CircleMarker>

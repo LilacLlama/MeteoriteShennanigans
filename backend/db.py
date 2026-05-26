@@ -48,7 +48,7 @@ def query(sql: str) -> list[dict]:
     rel = conn.execute(sql)
     cols = [d[0] for d in rel.description]
     rows = rel.fetchall()
-    return [dict(zip(cols, row)) for row in rows]
+    return [dict(zip(cols, row, strict=False)) for row in rows]
 
 
 def get_schema() -> dict:
