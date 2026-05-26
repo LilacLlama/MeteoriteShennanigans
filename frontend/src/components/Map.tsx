@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -74,6 +74,7 @@ export default function Map({
       zoom={2}
       minZoom={2}
       maxZoom={14}
+      preferCanvas={true}
       className="h-full w-full"
     >
       <TileLayer
@@ -84,33 +85,38 @@ export default function Map({
       <FlyTo points={points} selectedId={selectedId} />
       <ClickHandler onPlace={onPlaceMagnet} />
 
-      <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
-        {points.map((m) => (
-          <CircleMarker
-            key={m.id}
-            center={[m.reclat, m.reclong]}
-            radius={selectedId === m.id ? 8 : 4}
-            pathOptions={{
-              color: markerColor(m.fall),
-              fillColor: markerColor(m.fall),
-              fillOpacity: selectedId === m.id ? 1 : 0.7,
-              weight: selectedId === m.id ? 2 : 0,
-            }}
-            eventHandlers={{ click: () => onSelect(m) }}
-          >
-            <Popup>
-              <div className="text-sm font-sans">
-                <p className="font-bold text-gray-900">{m.name}</p>
-                <p className="text-gray-600">{m.recclass ?? "Unknown class"}</p>
-                <p className="text-gray-600">{massLabel(m.mass_g)}</p>
-                <p className="text-gray-600">
-                  {m.year ?? "Year unknown"} · {m.fall}
-                </p>
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
-      </MarkerClusterGroup>
+      {useMemo(
+        () => (
+          <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
+            {points.map((m) => (
+              <CircleMarker
+                key={m.id}
+                center={[m.reclat, m.reclong]}
+                radius={selectedId === m.id ? 8 : 4}
+                pathOptions={{
+                  color: markerColor(m.fall),
+                  fillColor: markerColor(m.fall),
+                  fillOpacity: selectedId === m.id ? 1 : 0.7,
+                  weight: selectedId === m.id ? 2 : 0,
+                }}
+                eventHandlers={{ click: () => onSelect(m) }}
+              >
+                <Popup>
+                  <div className="text-sm font-sans">
+                    <p className="font-bold text-gray-900">{m.name}</p>
+                    <p className="text-gray-600">{m.recclass ?? "Unknown class"}</p>
+                    <p className="text-gray-600">{massLabel(m.mass_g)}</p>
+                    <p className="text-gray-600">
+                      {m.year ?? "Year unknown"} · {m.fall}
+                    </p>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MarkerClusterGroup>
+        ),
+        [points, selectedId, onSelect],
+      )}
 
       {magnets.map((mag) => (
         <Circle
