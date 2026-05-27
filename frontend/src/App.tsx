@@ -16,7 +16,7 @@ import type {
 import { FALLBACK_MAGNET_RADII_KM } from "./constants";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
-const YIELD_DEBOUNCE_MS = 200;
+const YIELD_DEBOUNCE_MS = 100;
 
 const S2_LEVELS = [3, 4, 5, 6, 7] as const;
 const LEVEL_DESCRIPTIONS: Record<number, string> = {
