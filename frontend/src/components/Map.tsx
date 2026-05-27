@@ -9,7 +9,9 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
-import type { Magnet, MagnetRadiiKm, MeteoritePoint } from "../types";
+import type { Magnet, MagnetRadiiKm, MeteoritePoint, S2HeatCell, ViewMode } from "../types";
+import { massLabel } from "../utils/format";
+import HeatmapLayer from "./HeatmapLayer";
 
 interface Props {
   points: MeteoritePoint[];
@@ -19,6 +21,8 @@ interface Props {
   radii: MagnetRadiiKm;
   onPlaceMagnet: (lat: number, lon: number) => void;
   onRemoveMagnet: (id: string) => void;
+  viewMode: ViewMode;
+  heatCells: S2HeatCell[];
 }
 
 function FlyTo({
@@ -48,13 +52,6 @@ function ClickHandler({ onPlace }: { onPlace: (lat: number, lon: number) => void
   return null;
 }
 
-function massLabel(g: number | null): string {
-  if (g == null) return "Unknown mass";
-  if (g >= 1_000_000) return `${(g / 1_000_000).toFixed(1)} t`;
-  if (g >= 1_000) return `${(g / 1_000).toFixed(1)} kg`;
-  return `${g} g`;
-}
-
 function markerColor(fall: string | null): string {
   return fall === "Fell" ? "#f97316" : "#60a5fa";
 }
@@ -67,6 +64,8 @@ export default function Map({
   radii,
   onPlaceMagnet,
   onRemoveMagnet,
+  viewMode,
+  heatCells,
 }: Props) {
   // Memoised so adding/removing magnets doesn't re-cluster the 38k meteorites.
   // `onSelect` is assumed stable (useCallback in App.tsx) — if upstream drops
@@ -121,7 +120,7 @@ export default function Map({
       <FlyTo points={points} selectedId={selectedId} />
       <ClickHandler onPlace={onPlaceMagnet} />
 
-      {clusterLayer}
+      {viewMode === "markers" ? clusterLayer : <HeatmapLayer cells={heatCells} />}
 
       {magnets.map((mag) => (
         <Circle

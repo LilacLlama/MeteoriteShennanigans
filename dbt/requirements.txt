@@ -1,4 +1,4 @@
 dbt-core>=1.9,<2
 dbt-duckdb>=1.9,<2
-h3>=4.0,<5
+s2sphere>=0.2.5,<1
 pandas>=2.2,<3

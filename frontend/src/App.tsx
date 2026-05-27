@@ -1,24 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import Map from "./components/Map";
+import { HEATMAP_BUCKETS } from "./components/HeatmapLayer";
+import YieldBreakdown from "./components/YieldBreakdown";
+import { massLabel } from "./utils/format";
 import type {
   AppConfig,
   Magnet,
   MagnetRadiiKm,
   MagnetSize,
   MeteoritePoint,
+  S2HeatCell,
+  ViewMode,
   YieldResult,
 } from "./types";
 import { FALLBACK_MAGNET_RADII_KM } from "./constants";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const YIELD_DEBOUNCE_MS = 200;
-
-function massLabel(g: number | null): string {
-  if (g == null) return "Unknown";
-  if (g >= 1_000_000) return `${(g / 1_000_000).toFixed(1)} t`;
-  if (g >= 1_000) return `${(g / 1_000).toFixed(1)} kg`;
-  return `${g} g`;
-}
 
 function nextMagnetId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -36,6 +34,9 @@ export default function App() {
   const [yieldLoading, setYieldLoading] = useState(false);
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("markers");
+  const [heatCells, setHeatCells] = useState<S2HeatCell[]>([]);
+  const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/meteorites`)
@@ -62,6 +63,20 @@ export default function App() {
         // so the UI keeps working even if the config endpoint is unreachable.
       });
   }, []);
+
+  useEffect(() => {
+    // Lazy fetch — only on first switch to heatmap mode. Cache thereafter;
+    // /api/heatmap is a static mart so there's nothing to invalidate.
+    if (viewMode !== "heatmap" || heatCells.length > 0) return;
+    setHeatLoading(true);
+    fetch(`${API_BASE}/api/heatmap`)
+      .then((r) => r.json())
+      .then((cells: S2HeatCell[]) => {
+        setHeatCells(cells);
+        setHeatLoading(false);
+      })
+      .catch(() => setHeatLoading(false));
+  }, [viewMode, heatCells.length]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -159,11 +174,34 @@ export default function App() {
             radii={radii}
             onPlaceMagnet={handlePlaceMagnet}
             onRemoveMagnet={handleRemoveMagnet}
+            viewMode={viewMode}
+            heatCells={heatCells}
           />
         )}
 
+        {!loading && !error && viewMode === "heatmap" && (
+          <div className="absolute bottom-6 right-4 z-overlay bg-gray-900/90 backdrop-blur rounded-xl p-3 border border-gray-700 text-[10px] text-gray-300 space-y-1.5">
+            <p className="font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Meteorites per cell
+            </p>
+            {heatLoading && heatCells.length === 0 ? (
+              <p className="text-gray-500 italic">Loading…</p>
+            ) : (
+              HEATMAP_BUCKETS.map((b) => (
+                <div key={b.label} className="flex items-center gap-2">
+                  <span
+                    style={{ background: b.color }}
+                    className="w-3 h-3 rounded-sm inline-block"
+                  />
+                  {b.label}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {selected && (
-          <div className="absolute bottom-6 left-4 z-[1000] bg-gray-900/95 backdrop-blur rounded-2xl shadow-2xl p-4 w-72 border border-gray-700">
+          <div className="absolute bottom-6 left-4 z-overlay bg-gray-900/95 backdrop-blur rounded-2xl shadow-2xl p-4 w-72 border border-gray-700">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-white truncate">
@@ -241,6 +279,27 @@ export default function App() {
             Click the map to deploy a magnet. Your would-be haul updates below.
           </p>
         </header>
+
+        <section className="p-5 border-b border-gray-800 space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+            View
+          </p>
+          <div className="grid grid-cols-2 gap-1 bg-gray-800 rounded-lg p-1">
+            {(["markers", "heatmap"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`rounded-md py-1.5 text-xs font-medium capitalize transition ${
+                  viewMode === mode
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="p-5 border-b border-gray-800 space-y-3">
           <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
@@ -321,18 +380,35 @@ export default function App() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2 mb-4">
+                {/* Iron yield is the physically meaningful headline — bulk
+                    mass × per-class metal fraction. A villain who lifts
+                    rocks with a magnet only gets the iron part. */}
+                <div className="bg-gray-800 rounded-lg p-3 col-span-2">
+                  <p className="text-[10px] text-gray-500 uppercase">
+                    Iron yield
+                  </p>
+                  <p className="text-3xl font-semibold text-pink-400">
+                    {massLabel(yieldResult.summary.iron_mass_g)}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    of {massLabel(yieldResult.summary.total_mass_g)} bulk mass
+                  </p>
+                </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-[10px] text-gray-500 uppercase">Catches</p>
-                  <p className="text-2xl font-semibold text-pink-400">
+                  <p className="text-xl font-semibold text-gray-100">
                     {yieldResult.summary.count.toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-[10px] text-gray-500 uppercase">
-                    Total mass
+                    Catchable
                   </p>
-                  <p className="text-2xl font-semibold text-pink-400">
-                    {massLabel(yieldResult.summary.total_mass_g)}
+                  <p className="text-xl font-semibold text-gray-100">
+                    {yieldResult.summary.catchable_count.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    achondrites excluded
                   </p>
                 </div>
                 {yieldResult.summary.year_range[0] != null && (
@@ -349,27 +425,7 @@ export default function App() {
               </div>
 
               {yieldResult.by_class.length > 0 && (
-                <>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium mb-2">
-                    By classification
-                  </p>
-                  <ul className="space-y-1 text-xs">
-                    {yieldResult.by_class.map((row) => (
-                      <li
-                        key={row.recclass}
-                        className="flex items-center justify-between bg-gray-800/40 rounded px-2 py-1"
-                      >
-                        <span className="font-mono text-gray-300">
-                          {row.recclass}
-                        </span>
-                        <span className="text-gray-400">
-                          {row.count.toLocaleString()} ·{" "}
-                          {massLabel(row.total_mass_g)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                <YieldBreakdown byClass={yieldResult.by_class} />
               )}
             </>
           )}

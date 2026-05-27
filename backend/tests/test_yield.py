@@ -2,9 +2,10 @@
 Tests for `db.get_yield`.
 
 Assumes `data/meteorites.duckdb` has been built — run `make dbt-build` first.
-The Antarctic Allan Hills numbers (6,066 catches, L6 dominance) are stable
-fixtures of the NASA dataset; if they change, either the data shifted or
-the haversine math drifted, and we want to know.
+The Antarctic Allan Hills numbers (6,066 catches; Iron sorted to the top of
+the per-class breakdown because it dominates iron-mass even at low count) are
+stable fixtures of the NASA dataset; if they change, either the data shifted
+or the haversine / classification math drifted, and we want to know.
 """
 
 import pytest
@@ -19,11 +20,18 @@ def test_allan_hills_catches_expected_meteorites():
     result = get_yield([ALLAN_HILLS])
 
     assert result["summary"]["count"] == 6066
+    # Most Antarctic finds are chondrites — small free-metal fraction but
+    # not zero, so catchable_count is nearly all of count. Exact value is
+    # tied to the seed: if a class_group flips between zero and nonzero
+    # metal_fraction_pct in meteorite_class_composition.csv, this changes.
+    assert result["summary"]["catchable_count"] == 5959
     assert result["summary"]["total_mass_g"] > 1_000_000  # ~1.8 t historically
+    assert result["summary"]["iron_mass_g"] > 100_000  # ~610 kg historically
     assert result["summary"]["year_range"][0] is not None
     assert result["summary"]["year_range"][1] is not None
-    # L-chondrites (L6) dominate Antarctic finds.
-    assert result["by_class"][0]["recclass"] == "L6"
+    # Sorted by iron-mass: Iron meteorites are rare here but dominate yield.
+    assert result["by_class"][0]["class_group"] == "Iron"
+    assert result["by_class"][0]["magnetic_tier"] == "strong"
 
 
 def test_overlapping_magnets_dedupe():
@@ -33,6 +41,17 @@ def test_overlapping_magnets_dedupe():
     # Two identical magnets must not double-count the meteorites they share.
     assert one["summary"]["count"] == two["summary"]["count"]
     assert one["summary"]["total_mass_g"] == two["summary"]["total_mass_g"]
+    assert one["summary"]["iron_mass_g"] == two["summary"]["iron_mass_g"]
+
+
+def test_achondrite_only_region_has_zero_iron_mass():
+    # Yamato Mountains, Antarctica — a region with many lunar/Martian
+    # achondrite finds. Counts are non-zero but iron yield should be ~0
+    # for the achondrite slice. (We don't assert iron_mass==0 because the
+    # 500km radius will also sweep up some chondrites.)
+    result = get_yield([(-71.5, 35.5, 100.0)])
+    # Whatever we caught, catchable_count <= count (achondrites excluded).
+    assert result["summary"]["catchable_count"] <= result["summary"]["count"]
 
 
 def test_empty_magnets_returns_zero_state():

@@ -5,7 +5,8 @@ models:
     description: |
       Final fact table — one row per meteorite with valid coordinates.
       Served directly by `/api/meteorites` and used as the source for raw-point
-      spatial queries (the magnet yield endpoint does a haversine filter here).
+      spatial queries (the magnet yield endpoint does a haversine filter here,
+      then joins to `dim_meteorite_class` for the per-class metal fraction).
     columns:
       - name: id
         tests:
@@ -17,28 +18,88 @@ models:
       - name: longitude
         tests:
           - not_null
+      - name: class_group
+        description: Canonical class family. FK to `dim_meteorite_class`.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_meteorite_class')
+              field: class_group
 
-  - name: meteorites_by_h3
+  - name: dim_meteorite_class
     description: |
-      Meteorites bucketed into H3 hexagonal cells (resolution 3). One row per
-      occupied cell. Drives the density heatmap. Includes cell centroids so the
-      frontend doesn't need an H3 library client-side.
+      One row per canonical `class_group`. Source-of-truth physical attributes
+      come from the `meteorite_class_composition` seed; derived columns
+      (`magnetic_tier`, `is_magnetically_catchable`) are computed here so the
+      seed stays pure data and the interpretation is versioned in code.
     columns:
-      - name: h3_cell
+      - name: class_group
+        tests:
+          - not_null
+          - unique
+      - name: metal_fraction_pct
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+      - name: magnetic_tier
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['strong', 'medium', 'weak', 'none']
+      - name: is_magnetically_catchable
+        tests:
+          - not_null
+
+  - name: meteorites_by_s2
+    description: |
+      Meteorites bucketed into S2 cells at level 5 (~5,500 cells globally,
+      ~100,000 km² each). One row per occupied cell. Drives the density
+      heatmap. Cell IDs are hex tokens (strings) because the underlying int64
+      loses precision in JavaScript Number — strings round-trip safely across
+      the whole stack. Includes cell centroids so the frontend doesn't need
+      an S2 library client-side for label positioning.
+
+      `iron_mass_g` is the per-cell sum of free Fe-Ni metal mass — the
+      physically meaningful "magnet yield" quantity. `count` is the total
+      number of meteorites in the cell (including unclassified ones, which
+      contribute 0 iron mass).
+
+      S2 was chosen over H3 for its exact hierarchical aggregation:
+      `sum(4 children) = parent` with no overlap, so coarser-zoom views can
+      roll up by string prefix instead of recomputing from raw points.
+    columns:
+      - name: s2_cell
+        description: S2 cell ID as a hex token (e.g. "af0c"). String for JS precision.
         tests:
           - not_null
           - unique
       - name: count
         tests:
           - not_null
+      - name: iron_mass_g
+        tests:
+          - not_null
+      - name: level
+        description: S2 level (currently always 5). Carried for future multi-level marts.
+        tests:
+          - not_null
 
   - name: meteorites_by_class
-    description: Aggregate by petrologic classification.
+    description: |
+      Aggregate by canonical class group with magnetic_tier joined in.
+      Replaces the per-recclass aggregate (~400 buckets) with a per-class_group
+      view (~35 buckets) that lines up with the magnet-yield interpretation.
     columns:
-      - name: recclass
+      - name: class_group
         tests:
           - not_null
           - unique
+      - name: magnetic_tier
+        tests:
+          - accepted_values:
+              values: ['strong', 'medium', 'weak', 'none']
 
   - name: meteorites_by_decade
     description: Aggregate by decade. Surfaces the post-1980 Antarctic discovery boom.

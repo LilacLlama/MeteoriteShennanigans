@@ -10,7 +10,7 @@ Place your magnets. Catch the most space rocks. Become the world's most data-dri
 
 Meteorite Explorer is a planning tool for the discerning supervillain. You have a small armoury of meteorite magnets (a few sizes, limited number). Place them on a world map. The app tells you how many meteorites — and how much total mass — your magnets *would have* caught if they'd been deployed across the full span of recorded history.
 
-Under the hood it's a thin shell around a dbt-built DuckDB warehouse: every magnet placement triggers a spatial aggregation against pre-computed H3 cell densities derived from NASA's open dataset.
+Under the hood it's a thin shell around a dbt-built DuckDB warehouse: every magnet placement triggers a spatial aggregation against pre-computed S2 cell densities derived from NASA's open dataset.
 
 ### The user
 
@@ -22,13 +22,13 @@ You're a supervillain-in-training. You want maximum dramatic impact for minimum 
 2. **Magnet placement** — click anywhere to drop a magnet. Choose a size (S = 100 km, M = 500 km, L = 1500 km radius). Coverage circles show your reach; clicking an existing magnet removes it.
 3. **Expected yield** — live tally of total catches, total mass, and classification breakdown ("~430 ordinary chondrites, 12 iron meteorites, 1 lunar specimen"), with the historical year range covered. Computed server-side via a haversine query over the dbt-built `marts.meteorites` table, deduping landings caught by overlapping magnets.
 
-The `marts.meteorites_by_h3` density grid is also exposed via `GET /api/heatmap`. A choropleth render of it on the map is next on the list.
+The `marts.meteorites_by_s2` density grid is also exposed via `GET /api/heatmap`. A choropleth render of it on the map is next on the list. S2 was chosen over H3 because its quadtree gives exact hierarchical aggregation — coarser-zoom views can roll up by string prefix instead of recomputing from raw points.
 
 ### Why this dataset, this framing
 
 The dataset has a lot to say about *where* and *what*, and almost nothing useful about *when in the future* — which is the right shape for a "what would have happened" simulator rather than a real prediction tool. The supervillain framing turns that limitation into a feature: nobody expects rigorous forecasting from someone holding a giant magnet to the sky.
 
-The technical guts are a real data engineering pipeline (dbt + DuckDB + H3 spatial aggregations) rather than ad-hoc Python. **The product is the demo; the pipeline is the point.**
+The technical guts are a real data engineering pipeline (dbt + DuckDB + S2 spatial aggregations) rather than ad-hoc Python. **The product is the demo; the pipeline is the point.**
 
 ---
 
@@ -43,7 +43,7 @@ The technical guts are a real data engineering pipeline (dbt + DuckDB + H3 spati
 
 ```bash
 make install        # backend + frontend deps
-make dbt-install    # dbt-duckdb + h3 (build-time only)
+make dbt-install    # dbt-duckdb + s2sphere (build-time only)
 make dbt-build      # builds data/meteorites.duckdb from the CSV — runs 26 tests
 ```
 
@@ -111,7 +111,7 @@ mete/
 │       ├── intermediate/        # Empty — kept for future joins.
 │       └── marts/               # Business-ready tables consumed by the API.
 │           ├── meteorites.sql           # Fact table (one row per landing)
-│           ├── meteorites_by_h3.py      # Python model — H3 density grid
+│           ├── meteorites_by_s2.py      # Python model — S2 density grid
 │           ├── meteorites_by_class.sql  # Aggregate by classification
 │           └── meteorites_by_decade.sql # Aggregate by decade
 ├── frontend/

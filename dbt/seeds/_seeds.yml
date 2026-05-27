@@ -1,0 +1,50 @@
+version: 2
+
+seeds:
+  - name: meteorite_class_composition
+    description: |
+      Source-of-truth physical attributes for each meteorite class group.
+      One row per `class_group` produced by `int_meteorites_classified`.
+
+      `metal_fraction_pct` is the published free Fe-Ni metal content (0-100)
+      and is the only physical fact stored here — any magnetism labels,
+      catch probabilities, or other derived attributes belong in
+      `dim_meteorite_class`, not in the seed.
+
+      When NASA adds a recclass that produces a new class_group, the
+      `relationships` test on `meteorites.class_group` fails and this seed
+      must be updated.
+    config:
+      column_types:
+        class_group: varchar
+        metal_fraction_pct: double
+        parent_body: varchar
+        differentiated: boolean
+        source_note: varchar
+    columns:
+      - name: class_group
+        description: Canonical class family. Join key from `int_meteorites_classified`.
+        tests:
+          - not_null
+          - unique
+      - name: metal_fraction_pct
+        description: Free Fe-Ni metal content by mass, percent (0-100).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+      - name: parent_body
+        description: Body of origin or formation context.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['asteroid', 'asteroid_core', 'asteroid_core_mantle', 'asteroid_disrupted', 'Moon', 'Mars', 'Vesta', 'unknown']
+      - name: differentiated
+        description: True if the parent body melted and segregated a metallic core.
+        tests:
+          - not_null
+      - name: source_note
+        description: Citation or rationale for the metal fraction value.
+        tests:
+          - not_null

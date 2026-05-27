@@ -75,11 +75,15 @@ def get_meteorite(meteorite_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
-def get_h3_cells() -> list[dict]:
-    """H3 density grid driving the heatmap layer."""
+def get_s2_cells() -> list[dict]:
+    """S2 density grid driving the heatmap layer."""
     return query("""
-        SELECT h3_cell, count, total_mass_g, centroid_lat, centroid_lon, resolution
-        FROM main_marts.meteorites_by_h3
+        SELECT
+            s2_cell, count, total_mass_g, iron_mass_g,
+            centroid_lat, centroid_lon,
+            boundary_lats, boundary_lons,
+            level
+        FROM main_marts.meteorites_by_s2
         ORDER BY count DESC
     """)
 
@@ -101,7 +105,13 @@ _HAVERSINE_KM = """
 
 
 EMPTY_YIELD = {
-    "summary": {"count": 0, "total_mass_g": 0.0, "year_range": [None, None]},
+    "summary": {
+        "count": 0,
+        "catchable_count": 0,
+        "total_mass_g": 0.0,
+        "iron_mass_g": 0.0,
+        "year_range": [None, None],
+    },
     "by_class": [],
 }
 
@@ -113,8 +123,21 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     Args:
         magnets: list of (lat, lon, radius_km) tuples.
 
-    Returns total count, total mass, year range, and the top-20 classification
-    breakdown. Meteorites caught by overlapping magnets are counted once.
+    Returns:
+        summary.count            — meteorites geographically inside any radius
+        summary.catchable_count  — subset whose class has non-zero metal content
+        summary.total_mass_g     — bulk mass of all caught meteorites
+        summary.iron_mass_g      — physically meaningful yield: sum of
+                                   mass_g * metal_fraction_pct / 100
+        summary.year_range       — [first, last] year landed (None if all unknown)
+        by_class                 — full per-class_group breakdown (no top-N cap;
+                                   there are only ~35 class groups). Each row
+                                   carries magnetic_tier, count, total_mass_g,
+                                   iron_mass_g so the frontend can sort by any
+                                   field. Default sort is (iron_mass_g desc,
+                                   count desc) — deterministic for tests.
+
+    Meteorites caught by overlapping magnets are counted once.
     """
     if not magnets:
         return EMPTY_YIELD
@@ -123,8 +146,12 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     lons = [lon for _, lon, _ in magnets]
     radii = [r for _, _, r in magnets]
 
-    # One query, one scan: pull the deduplicated caught set, then aggregate in
-    # Python. Cheaper than two SQL passes and avoids any string-built SQL.
+    # Query through `int_meteorites_with_iron` so the runtime yield and the
+    # offline marts share one definition of iron_mass_g. The intermediate is
+    # materialised as a view, so query cost is identical to the raw join.
+    # LEFT-join semantics in the intermediate would keep unclassified rows
+    # with iron=0; we filter to classified here since per-class breakdown
+    # only makes sense for known class_groups.
     caught = (
         get_conn()
         .execute(
@@ -132,10 +159,17 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
         WITH magnets(mlat, mlon, radius_km) AS (
             SELECT unnest(?), unnest(?), unnest(?)
         )
-        SELECT DISTINCT m.id, m.recclass, m.mass_g, m.year_landed
-        FROM main_marts.meteorites m
+        SELECT DISTINCT
+            m.id,
+            m.class_group,
+            m.magnetic_tier,
+            m.mass_g,
+            m.iron_mass_g,
+            m.year_landed
+        FROM main_intermediate.int_meteorites_with_iron m
         CROSS JOIN magnets mag
-        WHERE {_HAVERSINE_KM} <= mag.radius_km
+        WHERE m.magnetic_tier IS NOT NULL
+          AND {_HAVERSINE_KM} <= mag.radius_km
         """,
             [lats, lons, radii],
         )
@@ -145,26 +179,43 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     if not caught:
         return EMPTY_YIELD
 
-    total_mass = sum(mass for _, _, mass, _ in caught if mass is not None)
-    years = [year for _, _, _, year in caught if year is not None]
+    total_mass = sum(mass for _, _, _, mass, _, _ in caught if mass is not None)
+    total_iron = sum(iron for _, _, _, _, iron, _ in caught if iron is not None)
+    catchable_count = sum(1 for _, _, tier, _, _, _ in caught if tier != "none")
+    years = [year for _, _, _, _, _, year in caught if year is not None]
     year_range = [min(years), max(years)] if years else [None, None]
 
-    by_class_agg: dict[str, list[float]] = {}
-    for _, recclass, mass, _ in caught:
-        agg = by_class_agg.setdefault(recclass, [0, 0.0])
-        agg[0] += 1
+    # Aggregate by class_group; tier is a function of class_group so it's
+    # safe to carry the first tier seen for each group.
+    by_class_agg: dict[str, list] = {}
+    for _, class_group, tier, mass, iron, _ in caught:
+        agg = by_class_agg.setdefault(class_group, [tier, 0, 0.0, 0.0])
+        agg[1] += 1
         if mass is not None:
-            agg[1] += mass
+            agg[2] += mass
+        if iron is not None:
+            agg[3] += iron
 
     by_class = sorted(
-        ({"recclass": c, "count": int(n), "total_mass_g": m} for c, (n, m) in by_class_agg.items()),
-        key=lambda row: -row["count"],
-    )[:20]
+        (
+            {
+                "class_group": cg,
+                "magnetic_tier": tier,
+                "count": int(n),
+                "total_mass_g": float(m),
+                "iron_mass_g": float(i),
+            }
+            for cg, (tier, n, m, i) in by_class_agg.items()
+        ),
+        key=lambda row: (-row["iron_mass_g"], -row["count"]),
+    )
 
     return {
         "summary": {
             "count": len(caught),
+            "catchable_count": catchable_count,
             "total_mass_g": float(total_mass),
+            "iron_mass_g": float(total_iron),
             "year_range": year_range,
         },
         "by_class": by_class,
