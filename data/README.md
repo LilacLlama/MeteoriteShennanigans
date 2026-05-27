@@ -119,6 +119,42 @@ print(f"L4 children sum: {sum_children:,}")
 print(f"match: {sum_children == top_l3[1]}")
 ```
 
+To see what those cells *are* — not just verify the math — decode the tokens
+via `s2sphere` to get their centroids, and pull the per-child breakdown out
+of the warehouse:
+
+```python
+import s2sphere
+
+parent_ll = s2sphere.CellId.from_token(top_l3[0]).to_lat_lng()
+print(f"parent {top_l3[0]}: ({parent_ll.lat().degrees:.2f}, {parent_ll.lng().degrees:.2f})")
+
+rows = con.execute("""
+    SELECT s2_cell, count,
+           ROUND(centroid_lat, 2) AS lat,
+           ROUND(centroid_lon, 2) AS lon
+    FROM main_marts.meteorites_by_s2
+    WHERE level = 4 AND s2_cell IN ?
+    ORDER BY count DESC
+""", [children_tokens]).fetchall()
+
+for token, count, lat, lon in rows:
+    print(f"  child {token}: count={count:>6,}  ({lat}, {lon})")
+```
+
+At time of writing this resolves to:
+
+```
+parent afc: (-82.86, 135.00)
+  child af9: count= 6,826  (-81.84, 162.55)
+  child aff: count=   200  (-86.52, 135.0)
+```
+
+Latitudes around −83° put both children deep in **East Antarctica** — which
+is *why* the top L3 cell is so dense. Antarctic survey programs (ANSMET,
+JARE, EUROMET) recover decades of accumulated falls from blue-ice fields;
+demo query #6 below shows that pattern as a time series.
+
 ### 3. Class composition + magnetic tier — iron yield by class
 
 `int_meteorites_with_iron` carries the per-row `iron_mass_g` and

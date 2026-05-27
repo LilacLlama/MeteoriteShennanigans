@@ -181,7 +181,7 @@ a comment.
 | `aws_iam_role.lambda` + `AWSLambdaBasicExecutionRole` | Lambda execution role (Bedrock policy removed with the agent — re-add when it returns) |
 | `aws_lambda_function` (container, 512 MB, 30 s) | The API. `lifecycle.ignore_changes = [image_uri]` so CI deploys aren't reverted |
 | `aws_lambda_permission` × 2 | Required since Oct 2025: both `InvokeFunctionUrl` *and* `InvokeFunction` — granting only the first returns 403 |
-| `aws_lambda_function_url` (`NONE`, `RESPONSE_STREAM`) | Public HTTPS endpoint, SSE-capable |
+| `aws_lambda_function_url` (`NONE`, `RESPONSE_STREAM`) | Public HTTPS endpoint, SSE-capable. **No `cors {}` block** — FastAPI's `CORSMiddleware` owns CORS. Both present → duplicate `Access-Control-Allow-Origin` header → Chrome CORS failure on every API call. |
 | `aws_s3_bucket` (frontend) + public-access block | Static site bucket, fully private |
 | `aws_cloudfront_origin_access_control` | SigV4-signed CloudFront → S3 reads |
 | `aws_cloudfront_distribution` | CDN, SPA-friendly 403/404 → `/index.html`, `*.cloudfront.net` cert |
