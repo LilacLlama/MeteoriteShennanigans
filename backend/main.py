@@ -1,5 +1,5 @@
 """
-FastAPI application — Meteorite Explorer backend.
+FastAPI application — Lodestone backend.
 
 Endpoints:
   GET  /api/config            — shared client/server constants (magnet radii)
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Meteorite Explorer API",
+    title="Lodestone API",
     version="0.1.0",
     description=(
         "Backend for the supervillain magnet-placement game. Serves the "

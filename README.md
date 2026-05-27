@@ -1,4 +1,4 @@
-# ☄️ Meteorite Explorer
+# ☄️ Lodestone
 
 [![Lint & Type Check](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/lint.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/lint.yml)
 [![dbt Build & Tests](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt.yml)
@@ -14,7 +14,7 @@ Place your magnets. Catch the most space rocks. Become the world's most data-dri
 
 ### What it is
 
-Meteorite Explorer is a planning tool for the discerning supervillain. You have a small armoury of meteorite magnets (a few sizes, limited number). Place them on a world map. The app tells you how many meteorites — and how much total mass — your magnets *would have* caught if they'd been deployed across the full span of recorded history.
+Lodestone is a planning tool for the discerning supervillain. You have a small armoury of meteorite magnets (a few sizes, limited number). Place them on a world map. The app tells you how many meteorites — and how much total mass — your magnets *would have* caught if they'd been deployed across the full span of recorded history.
 
 Under the hood it's a thin shell around a dbt-built DuckDB warehouse: every magnet placement triggers a spatial aggregation against pre-computed S2 cell densities derived from NASA's open dataset.
 

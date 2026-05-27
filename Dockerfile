@@ -1,5 +1,5 @@
 # ============================================================
-# Meteorite Explorer — Lambda-compatible Docker image
+# Lodestone — Lambda-compatible Docker image
 #
 # Multi-stage build:
 #   1. adapter        — pulls in the AWS Lambda Web Adapter binary
