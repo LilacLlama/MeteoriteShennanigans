@@ -33,7 +33,9 @@ function nextMagnetId(): string {
 
 export default function App() {
   const [points, setPoints] = useState<MeteoritePoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  // `loading` now tracks the lazy markers fetch (fires on first switch to
+  // markers view). Initial mount shows the heatmap, so no blocking load.
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MeteoritePoint | null>(null);
 
@@ -43,7 +45,7 @@ export default function App() {
   const [yieldLoading, setYieldLoading] = useState(false);
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("markers");
+  const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
   const [heatLevel, setHeatLevel] = useState<number>(5);
   const [heatCellsByLevel, setHeatCellsByLevel] = useState<
     Record<number, S2HeatCell[]>
@@ -51,6 +53,10 @@ export default function App() {
   const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
+    // Lazy fetch — only when user switches to markers view, and only once.
+    // Heatmap is the default view, so most visitors never pay this ~3MB cost.
+    if (viewMode !== "markers" || points.length > 0 || loading) return;
+    setLoading(true);
     fetch(`${API_BASE}/api/meteorites`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -64,7 +70,7 @@ export default function App() {
         setError(e.message);
         setLoading(false);
       });
-  }, []);
+  }, [viewMode, points.length, loading]);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/config`)
@@ -77,11 +83,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Eager-prefetch all 5 S2 levels on first switch to heatmap mode.
-    // Total payload is small (~1MB across all levels) and `/api/heatmap`
-    // is `Cache-Control: max-age=600`, so this trades ~1 second of upfront
-    // fetch for instant zoom transitions for the rest of the session.
-    if (viewMode !== "heatmap" || Object.keys(heatCellsByLevel).length > 0) return;
+    // Eager-prefetch all 5 S2 levels on mount. Heatmap is the default view
+    // (and the demo's main visual), so this is the initial blocking fetch.
+    // Total ~1.8MB across all levels; once loaded, switching between L3-L7
+    // is instant from the cache.
     setHeatLoading(true);
     const levels = [3, 4, 5, 6, 7];
     Promise.all(
@@ -96,7 +101,7 @@ export default function App() {
         setHeatLoading(false);
       })
       .catch(() => setHeatLoading(false));
-  }, [viewMode, heatCellsByLevel]);
+  }, []);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -164,11 +169,11 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">
       <div className="flex-1 relative">
-        {loading && (
+        {heatLoading && Object.keys(heatCellsByLevel).length === 0 && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-950">
             <div className="text-center space-y-3">
               <div className="text-4xl animate-spin">☄️</div>
-              <p className="text-gray-400 text-sm">Loading 38,399 meteorites…</p>
+              <p className="text-gray-400 text-sm">Loading heatmap…</p>
             </div>
           </div>
         )}
@@ -185,7 +190,7 @@ export default function App() {
           </div>
         )}
 
-        {!loading && !error && (
+        {!error && (
           <Map
             points={points}
             selectedId={selected?.id ?? null}
