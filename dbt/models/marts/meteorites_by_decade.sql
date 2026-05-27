@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- The post-1980 spike visible here is from systematic Antarctic survey
 -- programmes (ANSMET, JARE) finding decades of accumulated falls — not
 -- an actual change in the meteorite influx rate.

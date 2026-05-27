@@ -1,17 +1,5 @@
-{{ config(materialized='view') }}
-
--- One row per meteorite, joined to its class dim so `iron_mass_g` and
--- `magnetic_tier` are available per row. This is the single source of
--- truth for "what's the iron content of this rock?" — downstream marts
--- (meteorites_by_class, meteorites_by_s2) AND the runtime get_yield query
--- in backend/db.py all consume it instead of redoing the join.
---
--- LEFT JOIN keeps unclassified rows in the table with COALESCE'd
--- iron_mass_g = 0. Marts that want only classified rows can filter on
--- `magnetic_tier IS NOT NULL`.
---
--- Materialised as a view: it's a thin join and downstream consumers
--- always aggregate or filter, so paying for a stored copy buys nothing.
+-- LEFT JOIN keeps unclassified rows with iron_mass_g = 0; marts that
+-- want only classified rows can filter on `magnetic_tier IS NOT NULL`.
 --
 -- Layer-ordering note: this intermediate refs marts (`meteorites`,
 -- `dim_meteorite_class`), inverting the usual staging → intermediate →

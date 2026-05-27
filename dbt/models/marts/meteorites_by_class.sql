@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- Aggregate by canonical class group (not raw recclass) so the chart shows
 -- ~35 buckets instead of 400, and so magnetic_tier groupings line up.
 -- All per-row joins and the iron_mass_g calc live in `int_meteorites_with_iron`
