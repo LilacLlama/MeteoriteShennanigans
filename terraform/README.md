@@ -35,7 +35,6 @@ No modules.
 | [aws_ecr_lifecycle_policy.api](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_lifecycle_policy) | resource |
 | [aws_ecr_repository.api](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) | resource |
 | [aws_iam_role.lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
-| [aws_iam_role_policy.bedrock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 | [aws_iam_role_policy_attachment.lambda_basic](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_user.ci](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user) | resource |
 | [aws_iam_user_policy.ci](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user_policy) | resource |
@@ -54,15 +53,14 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_app_name"></a> [app\_name](#input\_app\_name) | Application name — used as a prefix for all resources | `string` | `"meteorite-explorer"` | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region to deploy into | `string` | `"us-east-1"` | no |
-| <a name="input_bedrock_model_id"></a> [bedrock\_model\_id](#input\_bedrock\_model\_id) | Bedrock cross-region inference profile ID for Claude | `string` | `"us.anthropic.claude-sonnet-4-5-20250514-v1:0"` | no |
-| <a name="input_lambda_memory_mb"></a> [lambda\_memory\_mb](#input\_lambda\_memory\_mb) | Lambda memory in MB (DuckDB needs headroom for 45k-row dataset) | `number` | `512` | no |
+| <a name="input_lambda_memory_mb"></a> [lambda\_memory\_mb](#input\_lambda\_memory\_mb) | Lambda memory in MB. 512 has headroom; the prebuilt warehouse is ~2 MB and queries are small, so 256 likely also works. | `number` | `512` | no |
 | <a name="input_lambda_timeout_s"></a> [lambda\_timeout\_s](#input\_lambda\_timeout\_s) | Lambda timeout in seconds | `number` | `30` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_api_url"></a> [api\_url](#output\_api\_url) | Lambda Function URL — set this as VITE\_API\_URL in Vercel |
+| <a name="output_api_url"></a> [api\_url](#output\_api\_url) | Lambda Function URL — set this as VITE\_API\_URL for the frontend build |
 | <a name="output_cloudfront_distribution_id"></a> [cloudfront\_distribution\_id](#output\_cloudfront\_distribution\_id) | CloudFront distribution ID — used by deploy-frontend.yml for cache invalidation |
 | <a name="output_ecr_repository_url"></a> [ecr\_repository\_url](#output\_ecr\_repository\_url) | ECR repository URL — used by deploy-backend.yml |
 | <a name="output_frontend_bucket"></a> [frontend\_bucket](#output\_frontend\_bucket) | S3 bucket name — used by deploy-frontend.yml for aws s3 sync |
