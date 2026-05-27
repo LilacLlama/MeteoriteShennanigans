@@ -3,9 +3,6 @@
 -- All per-row joins and the iron_mass_g calc live in `int_meteorites_with_iron`
 -- so this mart and `meteorites_by_s2` share the exact same definition of
 -- "iron content per landing."
---
--- Filter to classified rows only (inner join semantics) since the per-class
--- breakdown only makes sense for known class_groups.
 
 select
     class_group,
@@ -19,6 +16,10 @@ select
     min(year_landed) as first_year,
     max(year_landed) as last_year
 from {{ ref('int_meteorites_with_iron') }}
+-- Defense-in-depth: the relationships test on class_group plus the
+-- `unknown` seed row mean tier is never null in practice. Filter stays
+-- so an accidentally-disabled test or removed seed row can't leak NULLs
+-- into the per-class aggregate.
 where magnetic_tier is not null
 group by class_group, magnetic_tier, parent_body, differentiated
 order by count desc

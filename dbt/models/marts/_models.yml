@@ -99,9 +99,9 @@ models:
 
   - name: meteorites_by_class
     description: |
-      Aggregate by canonical class group with magnetic_tier joined in.
-      Replaces the per-recclass aggregate (~400 buckets) with a per-class_group
-      view (~35 buckets) that lines up with the magnet-yield interpretation.
+      Aggregate by canonical class_group (~35 buckets) with magnetic_tier
+      joined in. The class_group bucketing — not raw recclass (~400 distinct
+      values) — is what lines up with the magnet-yield interpretation.
     columns:
       - name: class_group
         tests:

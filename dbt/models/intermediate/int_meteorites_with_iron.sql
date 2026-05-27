@@ -1,5 +1,9 @@
--- LEFT JOIN keeps unclassified rows with iron_mass_g = 0; marts that
--- want only classified rows can filter on `magnetic_tier IS NOT NULL`.
+-- LEFT JOIN + COALESCE are defensive: every class_group should match a
+-- dim row (enforced by the relationships test and the `unknown` seed
+-- catch-all), but if one ever slips through, unmatched rows surface with
+-- iron_mass_g = 0 and null magnetic_tier rather than disappearing.
+-- Downstream consumers (`meteorites_by_class`, `backend/db.py get_yield`)
+-- filter on `magnetic_tier IS NOT NULL` as the matching guard.
 --
 -- Layer-ordering note: this intermediate refs marts (`meteorites`,
 -- `dim_meteorite_class`), inverting the usual staging → intermediate →

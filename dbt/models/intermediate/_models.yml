@@ -23,8 +23,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('dim_meteorite_class')
-              field: class_group
+              arguments:
+                to: ref('dim_meteorite_class')
+                field: class_group
 
   - name: int_meteorites_with_iron
     description: |

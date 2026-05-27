@@ -153,9 +153,10 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     # Query through `int_meteorites_with_iron` so the runtime yield and the
     # offline marts share one definition of iron_mass_g. The intermediate is
     # materialised as a view, so query cost is identical to the raw join.
-    # LEFT-join semantics in the intermediate would keep unclassified rows
-    # with iron=0; we filter to classified here since per-class breakdown
-    # only makes sense for known class_groups.
+    # The `magnetic_tier IS NOT NULL` filter mirrors `meteorites_by_class`:
+    # defensive against the relationships test getting disabled or the
+    # `unknown` seed row going missing — under normal conditions it's a
+    # no-op since every class_group has a dim row.
     caught = (
         get_conn()
         .execute(
