@@ -57,8 +57,6 @@ dbt builds into three schemas (configured in `dbt/dbt_project.yml`):
 | `main_marts` | `meteorites` — fact table, one row per landing |
 | | `dim_meteorite_class` — dimension, one row per `class_group` |
 | | `meteorites_by_s2` — density grid at 5 S2 levels (3-7) |
-| | `meteorites_by_class` — aggregate by `class_group` |
-| | `meteorites_by_decade` — aggregate by decade |
 
 Inspect any table's columns:
 ```python
@@ -123,20 +121,23 @@ print(f"match: {sum_children == top_l3[1]}")
 
 ### 3. Class composition + magnetic tier — iron yield by class
 
-The dim table is the source of truth for "how much catchable iron is in
-each class." Iron meteorites dominate the per-row metal content even
-though they're a tiny fraction of total finds:
+`int_meteorites_with_iron` carries the per-row `iron_mass_g` and
+`magnetic_tier`; rolling it up by `class_group` shows that Iron meteorites
+dominate per-row metal content even though they're a tiny fraction of total
+finds:
 
 ```python
 con.sql("""
     SELECT
         class_group,
         magnetic_tier,
-        count,
-        ROUND(total_mass_g / 1000, 1) AS total_mass_kg,
-        ROUND(iron_mass_g  / 1000, 1) AS iron_mass_kg
-    FROM main_marts.meteorites_by_class
-    ORDER BY iron_mass_g DESC
+        COUNT(*)                     AS count,
+        ROUND(SUM(mass_g)      / 1000, 1) AS total_mass_kg,
+        ROUND(SUM(iron_mass_g) / 1000, 1) AS iron_mass_kg
+    FROM main_intermediate.int_meteorites_with_iron
+    WHERE magnetic_tier IS NOT NULL
+    GROUP BY class_group, magnetic_tier
+    ORDER BY SUM(iron_mass_g) DESC
     LIMIT 10
 """).show()
 ```
@@ -178,9 +179,14 @@ Antarctic survey programs finding decades of accumulated falls in blue ice:
 
 ```python
 con.sql("""
-    SELECT decade, count, falls_witnessed, finds_recovered
-    FROM main_marts.meteorites_by_decade
-    WHERE decade >= 1900
+    SELECT
+        (year_landed // 10) * 10 AS decade,
+        COUNT(*)                                AS count,
+        COUNT(*) FILTER (WHERE fall = 'Fell')   AS falls_witnessed,
+        COUNT(*) FILTER (WHERE fall = 'Found')  AS finds_recovered
+    FROM main_marts.meteorites
+    WHERE year_landed >= 1900
+    GROUP BY decade
     ORDER BY decade
 """).show()
 ```
