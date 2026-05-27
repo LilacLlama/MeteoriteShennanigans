@@ -1,6 +1,6 @@
 # Terraform
 
-AWS infrastructure for the Meteorite Explorer backend + frontend. State is
+AWS infrastructure for the Lodestone backend + frontend. State is
 local (`terraform.tfstate`, gitignored); see the top-level
 [README](../README.md#infrastructure) for the bootstrap + day-to-day flow.
 

@@ -81,16 +81,14 @@ resource "aws_lambda_permission" "function_url_invoke" {
 }
 
 # ── Function URL (streaming SSE support) ────────────────────────────────────
+#
+# No cors {} block here — FastAPI's CORSMiddleware (backend/main.py) owns CORS.
+# Enabling both causes the `access-control-allow-origin` header to appear twice
+# in the response, which Chrome treats as a duplicate/concatenated value and
+# rejects with a CORS error, breaking all API calls in the browser.
 
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
   authorization_type = "NONE"
   invoke_mode        = "RESPONSE_STREAM"
-
-  cors {
-    allow_origins = ["*"]
-    allow_methods = ["GET", "POST"]
-    allow_headers = ["Content-Type"]
-    max_age       = 86400
-  }
 }

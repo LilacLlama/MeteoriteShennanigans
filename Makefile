@@ -6,7 +6,7 @@ RESET := \033[0m
 
 help: ## Show available targets
 	@echo ""
-	@echo "  Meteorite Explorer — available make targets"
+	@echo "  Lodestone — available make targets"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'

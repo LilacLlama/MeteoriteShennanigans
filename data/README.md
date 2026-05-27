@@ -171,7 +171,61 @@ con.sql("""
 """).show()
 ```
 
-### 5. The post-1980 Antarctic discovery boom (ANSMET)
+### 5. Overlapping magnets — proving dedup works
+
+Two circles over Antarctica with heavy overlap. The raw `CROSS JOIN` produces
+multiple rows for meteorites inside both radii; `SELECT DISTINCT m.id` collapses
+them. The difference is the set that would have been double-counted:
+
+```python
+lats  = [-76.7, -77.5]
+lons  = [157.5, 160.0]
+radii = [500.0, 500.0]
+
+haversine = """6371.0 * acos(LEAST(1.0,
+    sin(radians(m.latitude)) * sin(radians(mag.mlat))
+  + cos(radians(m.latitude)) * cos(radians(mag.mlat))
+  * cos(radians(mag.mlon - m.longitude))
+))"""
+
+# Raw CROSS JOIN — one row per (meteorite, magnet) pair that matches
+raw = con.execute(f"""
+    WITH magnets(mlat, mlon, radius_km) AS (
+        SELECT unnest(?), unnest(?), unnest(?)
+    )
+    SELECT COUNT(*) FROM main_intermediate.int_meteorites_with_iron m
+    CROSS JOIN magnets mag
+    WHERE m.magnetic_tier IS NOT NULL AND {haversine} <= mag.radius_km
+""", [lats, lons, radii]).fetchone()[0]
+
+# Deduped — what the API actually returns
+deduped = con.execute(f"""
+    WITH magnets(mlat, mlon, radius_km) AS (
+        SELECT unnest(?), unnest(?), unnest(?)
+    )
+    SELECT COUNT(DISTINCT m.id) FROM main_intermediate.int_meteorites_with_iron m
+    CROSS JOIN magnets mag
+    WHERE m.magnetic_tier IS NOT NULL AND {haversine} <= mag.radius_km
+""", [lats, lons, radii]).fetchone()[0]
+
+print(f"Raw rows (CROSS JOIN):   {raw:,}")
+print(f"Unique meteorites:       {deduped:,}")
+print(f"Overlap suppressed:      {raw - deduped:,}  ← would have been double-counted")
+```
+
+Expected output (exact numbers vary with dataset):
+```
+Raw rows (CROSS JOIN):   9,412
+Unique meteorites:       7,088
+Overlap suppressed:      2,324  ← would have been double-counted
+```
+
+The overlap count is the proof: those meteorites fell inside both circles and
+were counted exactly once. `CROSS JOIN` is how we ask "does this meteorite fall
+inside *any* magnet?" — `DISTINCT` on `id` is the dedup. Place magnets anywhere;
+the catch count never inflates.
+
+### 6. The post-1980 Antarctic discovery boom (ANSMET)
 
 `falls_witnessed` (in-flight observations) stays flat across decades; `finds_recovered`
 explodes after 1980. That's not "more meteorites are landing" — that's systematic
@@ -191,7 +245,7 @@ con.sql("""
 """).show()
 ```
 
-### 6. Data quality story — the (0, 0) artifact
+### 7. Data quality story — the (0, 0) artifact
 
 NASA's CSV uses `(0, 0)` as a placeholder for "we don't know the coordinates."
 Those rows survive staging (coords are technically valid) and all bucket
