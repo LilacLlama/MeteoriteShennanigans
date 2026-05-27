@@ -10,6 +10,7 @@ import {
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { Magnet, MagnetRadiiKm, MeteoritePoint, S2HeatCell, ViewMode } from "../types";
+import { massLabel } from "../lib/format";
 import HeatmapLayer from "./HeatmapLayer";
 
 interface Props {
@@ -49,13 +50,6 @@ function ClickHandler({ onPlace }: { onPlace: (lat: number, lon: number) => void
     },
   });
   return null;
-}
-
-function massLabel(g: number | null): string {
-  if (g == null) return "Unknown mass";
-  if (g >= 1_000_000) return `${(g / 1_000_000).toFixed(1)} t`;
-  if (g >= 1_000) return `${(g / 1_000).toFixed(1)} kg`;
-  return `${g} g`;
 }
 
 function markerColor(fall: string | null): string {

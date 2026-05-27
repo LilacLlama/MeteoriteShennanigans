@@ -1,5 +1,6 @@
 import { Polygon, Tooltip } from "react-leaflet";
 import type { S2HeatCell } from "../types";
+import { massLabel } from "../lib/format";
 
 // Log-bucketed count → heat palette. Buckets chosen so each row of the
 // legend is meaningfully different at a glance: Antarctica's top cells
@@ -19,12 +20,6 @@ function colorForCount(count: number): string {
     if (count <= b.max) return b.color;
   }
   return HEATMAP_BUCKETS[HEATMAP_BUCKETS.length - 1].color;
-}
-
-function massLabel(g: number): string {
-  if (g >= 1_000_000) return `${(g / 1_000_000).toFixed(1)} t`;
-  if (g >= 1_000) return `${(g / 1_000).toFixed(1)} kg`;
-  return `${Math.round(g)} g`;
 }
 
 interface Props {

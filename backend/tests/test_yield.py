@@ -21,7 +21,9 @@ def test_allan_hills_catches_expected_meteorites():
 
     assert result["summary"]["count"] == 6066
     # Most Antarctic finds are chondrites — small free-metal fraction but
-    # not zero, so catchable_count is nearly all of count.
+    # not zero, so catchable_count is nearly all of count. Exact value is
+    # tied to the seed: if a class_group flips between zero and nonzero
+    # metal_fraction_pct in meteorite_class_composition.csv, this changes.
     assert result["summary"]["catchable_count"] == 5959
     assert result["summary"]["total_mass_g"] > 1_000_000  # ~1.8 t historically
     assert result["summary"]["iron_mass_g"] > 100_000  # ~610 kg historically

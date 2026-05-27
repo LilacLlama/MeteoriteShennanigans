@@ -146,8 +146,12 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     lons = [lon for _, lon, _ in magnets]
     radii = [r for _, _, r in magnets]
 
-    # One query, one scan. Iron mass is computed per-row in SQL so the Python
-    # aggregation only sums; class metadata comes from dim_meteorite_class.
+    # Query through `int_meteorites_with_iron` so the runtime yield and the
+    # offline marts share one definition of iron_mass_g. The intermediate is
+    # materialised as a view, so query cost is identical to the raw join.
+    # LEFT-join semantics in the intermediate would keep unclassified rows
+    # with iron=0; we filter to classified here since per-class breakdown
+    # only makes sense for known class_groups.
     caught = (
         get_conn()
         .execute(
@@ -158,14 +162,14 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
         SELECT DISTINCT
             m.id,
             m.class_group,
-            d.magnetic_tier,
+            m.magnetic_tier,
             m.mass_g,
-            m.mass_g * d.metal_fraction_pct / 100.0 AS iron_mass_g,
+            m.iron_mass_g,
             m.year_landed
-        FROM main_marts.meteorites m
-        JOIN main_marts.dim_meteorite_class d USING (class_group)
+        FROM main_intermediate.int_meteorites_with_iron m
         CROSS JOIN magnets mag
-        WHERE {_HAVERSINE_KM} <= mag.radius_km
+        WHERE m.magnetic_tier IS NOT NULL
+          AND {_HAVERSINE_KM} <= mag.radius_km
         """,
             [lats, lons, radii],
         )

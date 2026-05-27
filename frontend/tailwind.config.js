@@ -3,9 +3,13 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      // Named layers for the mobile sidebar stacking context.
-      // backdrop < sidebar < toggle so the toggle is always tappable.
+      // Named layers (low → high):
+      //   overlay  — map-floating UI (selected-meteorite card, heatmap legend)
+      //   backdrop — mobile sidebar tap-out backdrop
+      //   sidebar  — mobile sidebar panel itself
+      //   toggle   — mobile sidebar toggle button, always tappable on top
       zIndex: {
+        overlay: "1000",
         backdrop: "1300",
         sidebar: "1400",
         toggle: "1500",
