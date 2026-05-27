@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: int_meteorites_classified
+    description: |
+      One row per meteorite with the raw `recclass` normalized into a canonical
+      `class_group` that joins to `dim_meteorite_class`. The CASE ladder is the
+      only place that parses NASA's free-text classification — downstream models
+      should always join via `class_group`, never re-parse `recclass`.
+
+      Unmatched recclass values fall into the 'unknown' bucket. The
+      `relationships` test on the downstream fact will fail if a new
+      `class_group` value appears without a corresponding seed row.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: recclass
+        description: Original NASA recclass string, preserved for traceability.
+      - name: class_group
+        description: Canonical family. FK to `dim_meteorite_class`.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_meteorite_class')
+              field: class_group
+
+  - name: int_meteorites_with_iron
+    description: |
+      Per-row enrichment of `meteorites` with `metal_fraction_pct`,
+      `magnetic_tier`, and `iron_mass_g` from `dim_meteorite_class`. Single
+      source of truth for "how much catchable iron is in this rock?" — both
+      `meteorites_by_class` and `meteorites_by_s2` consume this rather than
+      redoing the join.
+
+      LEFT JOIN preserves unclassified rows with iron_mass_g = 0. Filter on
+      `magnetic_tier IS NOT NULL` to drop them.
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+      - name: iron_mass_g
+        description: mass_g * (metal_fraction_pct / 100), 0 for unclassified.
+        tests:
+          - not_null

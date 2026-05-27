@@ -5,7 +5,7 @@ Endpoints:
   GET  /api/config            — shared client/server constants (magnet radii)
   GET  /api/meteorites        — all map points (id, name, lat, lon, class, mass, year, fall)
   GET  /api/meteorites/{id}   — single meteorite detail
-  GET  /api/heatmap           — H3 cell density grid for the heatmap layer
+  GET  /api/heatmap           — S2 cell density grid for the heatmap layer
   POST /api/yield             — expected catch for a set of magnet placements
   GET  /health                — health check
 """
@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from db import MAGNET_RADII_KM, get_all_points, get_conn, get_h3_cells, get_meteorite, get_yield
+from db import MAGNET_RADII_KM, get_all_points, get_conn, get_meteorite, get_s2_cells, get_yield
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,8 +68,8 @@ def meteorite_detail(meteorite_id: int):
 
 @app.get("/api/heatmap")
 def heatmap():
-    """H3 cell density grid — drives the supervillain's reconnaissance overlay."""
-    return get_h3_cells()
+    """S2 cell density grid — drives the supervillain's reconnaissance overlay."""
+    return get_s2_cells()
 
 
 class Magnet(BaseModel):

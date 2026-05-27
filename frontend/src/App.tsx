@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Map from "./components/Map";
+import { HEATMAP_BUCKETS } from "./components/HeatmapLayer";
 import type {
   AppConfig,
   Magnet,
   MagnetRadiiKm,
   MagnetSize,
+  MagneticTier,
   MeteoritePoint,
+  S2HeatCell,
+  ViewMode,
   YieldResult,
 } from "./types";
 import { FALLBACK_MAGNET_RADII_KM } from "./constants";
@@ -24,6 +28,16 @@ function nextMagnetId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const TIER_CHIP: Record<MagneticTier, string> = {
+  strong: "bg-pink-500/20 text-pink-300",
+  medium: "bg-amber-500/20 text-amber-300",
+  weak: "bg-sky-500/20 text-sky-300",
+  none: "bg-gray-700/40 text-gray-500",
+};
+
+type YieldSort = "iron" | "count";
+type YieldView = "caught" | "missed";
+
 export default function App() {
   const [points, setPoints] = useState<MeteoritePoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +50,11 @@ export default function App() {
   const [yieldLoading, setYieldLoading] = useState(false);
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [yieldSort, setYieldSort] = useState<YieldSort>("iron");
+  const [yieldView, setYieldView] = useState<YieldView>("caught");
+  const [viewMode, setViewMode] = useState<ViewMode>("markers");
+  const [heatCells, setHeatCells] = useState<S2HeatCell[]>([]);
+  const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/meteorites`)
@@ -62,6 +81,20 @@ export default function App() {
         // so the UI keeps working even if the config endpoint is unreachable.
       });
   }, []);
+
+  useEffect(() => {
+    // Lazy fetch — only on first switch to heatmap mode. Cache thereafter;
+    // /api/heatmap is a static mart so there's nothing to invalidate.
+    if (viewMode !== "heatmap" || heatCells.length > 0) return;
+    setHeatLoading(true);
+    fetch(`${API_BASE}/api/heatmap`)
+      .then((r) => r.json())
+      .then((cells: S2HeatCell[]) => {
+        setHeatCells(cells);
+        setHeatLoading(false);
+      })
+      .catch(() => setHeatLoading(false));
+  }, [viewMode, heatCells.length]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -159,7 +192,30 @@ export default function App() {
             radii={radii}
             onPlaceMagnet={handlePlaceMagnet}
             onRemoveMagnet={handleRemoveMagnet}
+            viewMode={viewMode}
+            heatCells={heatCells}
           />
+        )}
+
+        {!loading && !error && viewMode === "heatmap" && (
+          <div className="absolute bottom-6 right-4 z-[1000] bg-gray-900/90 backdrop-blur rounded-xl p-3 border border-gray-700 text-[10px] text-gray-300 space-y-1.5">
+            <p className="font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Meteorites per cell
+            </p>
+            {heatLoading && heatCells.length === 0 ? (
+              <p className="text-gray-500 italic">Loading…</p>
+            ) : (
+              HEATMAP_BUCKETS.map((b) => (
+                <div key={b.label} className="flex items-center gap-2">
+                  <span
+                    style={{ background: b.color }}
+                    className="w-3 h-3 rounded-sm inline-block"
+                  />
+                  {b.label}
+                </div>
+              ))
+            )}
+          </div>
         )}
 
         {selected && (
@@ -242,6 +298,27 @@ export default function App() {
           </p>
         </header>
 
+        <section className="p-5 border-b border-gray-800 space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+            View
+          </p>
+          <div className="grid grid-cols-2 gap-1 bg-gray-800 rounded-lg p-1">
+            {(["markers", "heatmap"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`rounded-md py-1.5 text-xs font-medium capitalize transition ${
+                  viewMode === mode
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="p-5 border-b border-gray-800 space-y-3">
           <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
             Magnet size
@@ -321,18 +398,35 @@ export default function App() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2 mb-4">
+                {/* Iron yield is the physically meaningful headline — bulk
+                    mass × per-class metal fraction. A villain who lifts
+                    rocks with a magnet only gets the iron part. */}
+                <div className="bg-gray-800 rounded-lg p-3 col-span-2">
+                  <p className="text-[10px] text-gray-500 uppercase">
+                    Iron yield
+                  </p>
+                  <p className="text-3xl font-semibold text-pink-400">
+                    {massLabel(yieldResult.summary.iron_mass_g)}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    of {massLabel(yieldResult.summary.total_mass_g)} bulk mass
+                  </p>
+                </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-[10px] text-gray-500 uppercase">Catches</p>
-                  <p className="text-2xl font-semibold text-pink-400">
+                  <p className="text-xl font-semibold text-gray-100">
                     {yieldResult.summary.count.toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-[10px] text-gray-500 uppercase">
-                    Total mass
+                    Catchable
                   </p>
-                  <p className="text-2xl font-semibold text-pink-400">
-                    {massLabel(yieldResult.summary.total_mass_g)}
+                  <p className="text-xl font-semibold text-gray-100">
+                    {yieldResult.summary.catchable_count.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    achondrites excluded
                   </p>
                 </div>
                 {yieldResult.summary.year_range[0] != null && (
@@ -348,29 +442,119 @@ export default function App() {
                 )}
               </div>
 
-              {yieldResult.by_class.length > 0 && (
-                <>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium mb-2">
-                    By classification
-                  </p>
-                  <ul className="space-y-1 text-xs">
-                    {yieldResult.by_class.map((row) => (
-                      <li
-                        key={row.recclass}
-                        className="flex items-center justify-between bg-gray-800/40 rounded px-2 py-1"
-                      >
-                        <span className="font-mono text-gray-300">
-                          {row.recclass}
-                        </span>
-                        <span className="text-gray-400">
-                          {row.count.toLocaleString()} ·{" "}
-                          {massLabel(row.total_mass_g)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+              {yieldResult.by_class.length > 0 &&
+                (() => {
+                  const caught = yieldResult.by_class.filter(
+                    (r) => r.magnetic_tier !== "none",
+                  );
+                  const missed = yieldResult.by_class.filter(
+                    (r) => r.magnetic_tier === "none",
+                  );
+                  // Auto-flip back to caught if the active view has no rows
+                  // (e.g. user removes the only achondrite-containing magnet).
+                  const view =
+                    yieldView === "missed" && missed.length === 0
+                      ? "caught"
+                      : yieldView;
+                  const rows = view === "caught" ? caught : missed;
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <div className="flex gap-1 text-[10px]">
+                          <button
+                            onClick={() => setYieldView("caught")}
+                            className={`px-2 py-0.5 rounded uppercase tracking-wider font-medium transition ${
+                              view === "caught"
+                                ? "bg-pink-500/20 text-pink-300"
+                                : "text-gray-500 hover:text-gray-300"
+                            }`}
+                          >
+                            Caught ({caught.length})
+                          </button>
+                          {missed.length > 0 && (
+                            <button
+                              onClick={() => setYieldView("missed")}
+                              className={`px-2 py-0.5 rounded uppercase tracking-wider font-medium transition ${
+                                view === "missed"
+                                  ? "bg-gray-700/60 text-gray-300"
+                                  : "text-gray-500 hover:text-gray-300"
+                              }`}
+                            >
+                              Missed ({missed.length})
+                            </button>
+                          )}
+                        </div>
+                        {view === "caught" && (
+                          <div className="flex gap-1 text-[10px]">
+                            {(["iron", "count"] as YieldSort[]).map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setYieldSort(s)}
+                                className={`px-2 py-0.5 rounded transition ${
+                                  yieldSort === s
+                                    ? "bg-pink-500/20 text-pink-300"
+                                    : "text-gray-500 hover:text-gray-300"
+                                }`}
+                              >
+                                {s === "iron" ? "iron" : "count"}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {view === "missed" && (
+                        <p className="text-[10px] text-gray-500 mb-2 italic leading-relaxed">
+                          In range but not magnetically catchable — differentiated
+                          parent bodies (Moon, Mars, Vesta) have no free iron.
+                        </p>
+                      )}
+
+                      <ul className="space-y-1 text-xs">
+                        {[...rows]
+                          .sort((a, b) =>
+                            view === "missed"
+                              ? b.count - a.count ||
+                                b.total_mass_g - a.total_mass_g
+                              : yieldSort === "iron"
+                                ? b.iron_mass_g - a.iron_mass_g ||
+                                  b.count - a.count
+                                : b.count - a.count ||
+                                  b.iron_mass_g - a.iron_mass_g,
+                          )
+                          .map((row) => (
+                            <li
+                              key={row.class_group}
+                              className="flex items-center justify-between bg-gray-800/40 rounded px-2 py-1 gap-2"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-gray-300 truncate">
+                                  {row.class_group}
+                                </span>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-medium shrink-0 ${TIER_CHIP[row.magnetic_tier]}`}
+                                >
+                                  {row.magnetic_tier}
+                                </span>
+                              </span>
+                              <span className="text-gray-400 text-right shrink-0">
+                                <span className="text-gray-500">
+                                  {row.count.toLocaleString()}
+                                </span>{" "}
+                                ·{" "}
+                                {massLabel(
+                                  view === "missed"
+                                    ? row.total_mass_g
+                                    : row.iron_mass_g,
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    </>
+                  );
+                })()}
             </>
           )}
         </section>
