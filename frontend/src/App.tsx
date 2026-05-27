@@ -87,20 +87,41 @@ export default function App() {
     // (and the demo's main visual), so this is the initial blocking fetch.
     // Total ~1.8MB across all levels; once loaded, switching between L3-L7
     // is instant from the cache.
+    //
+    // Using `Promise.allSettled` so one failed level doesn't nuke the other
+    // four — the user still sees a partial heatmap. If ALL levels fail, we
+    // surface the existing error overlay.
     setHeatLoading(true);
     const levels = [3, 4, 5, 6, 7];
-    Promise.all(
+    Promise.allSettled(
       levels.map((level) =>
         fetch(`${API_BASE}/api/heatmap?level=${level}`)
-          .then((r) => r.json())
+          .then((r) => {
+            if (!r.ok) throw new Error(`L${level}: HTTP ${r.status}`);
+            return r.json();
+          })
           .then((cells: S2HeatCell[]) => [level, cells] as const),
       ),
-    )
-      .then((results) => {
-        setHeatCellsByLevel(Object.fromEntries(results));
-        setHeatLoading(false);
-      })
-      .catch(() => setHeatLoading(false));
+    ).then((results) => {
+      const successes = results
+        .filter(
+          (r): r is PromiseFulfilledResult<readonly [number, S2HeatCell[]]> =>
+            r.status === "fulfilled",
+        )
+        .map((r) => r.value);
+      const failureCount = results.length - successes.length;
+
+      setHeatCellsByLevel(Object.fromEntries(successes));
+      setHeatLoading(false);
+
+      if (failureCount === results.length) {
+        setError("Heatmap data unavailable — try refreshing in a moment.");
+      } else if (failureCount > 0) {
+        console.warn(
+          `Heatmap: ${failureCount}/${results.length} level fetches failed; rendering partial data`,
+        );
+      }
+    });
   }, []);
 
   useEffect(() => {

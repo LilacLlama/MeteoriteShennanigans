@@ -33,11 +33,20 @@ def get_conn() -> duckdb.DuckDBPyConnection:
 
 
 def query(sql: str, params: list | None = None) -> list[dict]:
-    """Execute a SQL query and return rows as a list of dicts."""
-    conn = get_conn()
-    rel = conn.execute(sql, params) if params else conn.execute(sql)
-    cols = [d[0] for d in rel.description]
-    rows = rel.fetchall()
+    """Execute a SQL query and return rows as a list of dicts.
+
+    Uses a per-call cursor so concurrent FastAPI threads (FastAPI runs sync
+    `def` handlers in a threadpool) don't share execute/fetch state on the
+    singleton connection — that race was producing intermittent empty
+    responses when the frontend fired all 5 heatmap-level fetches at once.
+    """
+    cur = get_conn().cursor()
+    if params:
+        cur.execute(sql, params)
+    else:
+        cur.execute(sql)
+    cols = [d[0] for d in cur.description]
+    rows = cur.fetchall()
     return [dict(zip(cols, row, strict=False)) for row in rows]
 
 
@@ -157,10 +166,10 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     # against the relationships test getting disabled or the `unknown` seed
     # row going missing — under normal conditions it's a no-op since every
     # class_group has a dim row.
-    caught = (
-        get_conn()
-        .execute(
-            f"""
+    # Per-call cursor — same concurrency reason as `query()` above.
+    cur = get_conn().cursor()
+    cur.execute(
+        f"""
         WITH magnets(mlat, mlon, radius_km) AS (
             SELECT unnest(?), unnest(?), unnest(?)
         )
@@ -176,10 +185,9 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
         WHERE m.magnetic_tier IS NOT NULL
           AND {_HAVERSINE_KM} <= mag.radius_km
         """,
-            [lats, lons, radii],
-        )
-        .fetchall()
+        [lats, lons, radii],
     )
+    caught = cur.fetchall()
 
     if not caught:
         return EMPTY_YIELD
