@@ -504,7 +504,15 @@ export default function App() {
         </section>
 
         <footer className="p-3 border-t border-gray-800 text-[10px] text-gray-600 text-center">
-          historical data only · 32,186 meteorites · NASA Open Data
+          historical data only · 32,186 meteorites · NASA Open Data ·{" "}
+          <a
+            href={`${API_BASE}/docs`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-gray-400"
+          >
+            API docs
+          </a>
         </footer>
       </aside>
     </div>
