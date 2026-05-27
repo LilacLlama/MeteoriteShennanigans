@@ -24,7 +24,7 @@ def test_allan_hills_catches_expected_meteorites():
     # not zero, so catchable_count is nearly all of count.
     assert result["summary"]["catchable_count"] == 5959
     assert result["summary"]["total_mass_g"] > 1_000_000  # ~1.8 t historically
-    assert result["summary"]["iron_mass_g"] > 100_000     # ~610 kg historically
+    assert result["summary"]["iron_mass_g"] > 100_000  # ~610 kg historically
     assert result["summary"]["year_range"][0] is not None
     assert result["summary"]["year_range"][1] is not None
     # Sorted by iron-mass: Iron meteorites are rare here but dominate yield.

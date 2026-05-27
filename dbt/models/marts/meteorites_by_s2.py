@@ -59,8 +59,7 @@ def model(dbt, session):
     df: pd.DataFrame = dbt.ref("int_meteorites_with_iron").df()
 
     df["s2_cell"] = [
-        _cell_token(lat, lon)
-        for lat, lon in zip(df["latitude"], df["longitude"], strict=True)
+        _cell_token(lat, lon) for lat, lon in zip(df["latitude"], df["longitude"], strict=True)
     ]
 
     grouped = df.groupby("s2_cell", as_index=False).agg(
