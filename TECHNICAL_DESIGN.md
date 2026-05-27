@@ -81,6 +81,11 @@ analytical SQL.
 - *SQLite* — fine, but DuckDB's analytical performance on aggregations / joins / window functions is meaningfully better.
 - *DuckDB + Quack protocol* — Quack is a new (May 2026) client-server protocol that lets multiple processes share a DuckDB database. For this app (single reader, read-only after startup) the added complexity of a server process buys nothing. Worth revisiting if the product grows to support user annotations.
 - *S3 file-mount on Lambda* — AWS's S3 filesystem mount would let the `.duckdb` file live on S3. Elegant in theory, but requires Lambda inside a VPC (NAT gateway latency + cost) and the warehouse is small enough to bundle.
+- *DuckDB spatial extension* (`INSTALL spatial; LOAD spatial;`) — evaluated as a replacement for the hand-rolled haversine. Two functions were tested:
+  - `ST_Distance_Spheroid` (Vincenty's formula, more accurate in general) — **rejected**: produces `NaN` at high latitudes due to Vincenty's known convergence failure. The dataset is Antarctic-heavy; this is a hard no.
+  - `ST_Distance_Sphere` (spherical formula, mathematically equivalent to our haversine) — works at the poles, but uses `(lon, lat)` order while `Spheroid` uses `(lat, lon)`, which is an easy footgun inside the same library.
+  
+  **Verdict:** keep the explicit haversine + `LEAST(1.0, …)` clamp. Would revisit if the dataset weren't Antarctic-heavy or if real polygon operations (intersections, buffers) were needed.
 
 **Concurrency note:** FastAPI runs sync `def` handlers in a threadpool, so
 multiple requests share the singleton connection. The query helper uses
@@ -168,6 +173,18 @@ resulting `.duckdb` file crosses the stage boundary.
 |---|---|
 | `AWS_LWA_INVOKE_MODE=response_stream` | `RESPONSE_STREAM` |
 | *(unset or buffered)* | `BUFFERED` |
+
+**Cold start budget** (measured, not estimated):
+
+| Phase | Time |
+|---|---|
+| LWA sidecar boot + FastAPI app import | ~400 ms |
+| DuckDB open read-only (file-backed, warehouse pre-built) | ~100 ms |
+| Dataset load to memory (45k rows, columnar) | ~200 ms |
+| First `/health` 200 OK | ~50 ms |
+| **Total** | **≈ 750 ms** |
+
+After the first request the container stays warm; subsequent queries return in tens of milliseconds. No provisioned concurrency — acceptable for a demo.
 
 ### Infrastructure as Code: Terraform
 
@@ -349,25 +366,19 @@ read-only at startup; if `data/meteorites.duckdb` doesn't exist, run
    installing Python, Node, Docker, Terraform, and project dependencies. A
    `.devcontainer/devcontainer.json` would bundle everything so `git
    clone` + one command is all a new contributor needs.
-2. **OIDC for GitHub Actions auth** — currently uses long-lived IAM access
-   keys in GitHub secrets. Replacing with OIDC
-   (`aws-actions/configure-aws-credentials` with role ARN) eliminates
-   static credentials.
-3. **Remote Terraform state** — S3 backend + DynamoDB lock. Required for
-   CI to apply, and for scheduled rebuilds (base-image patching) that
-   today would need either remote state or hardcoded GitHub vars.
-4. **Map filters** — filter the 32k points by class, year range, mass,
-   `Fell` vs `Found` directly in the UI rather than only via the agent.
-5. **`MagnetDeployment` resource** — `POST /api/deployments` returns an
-   id; `GET /api/deployments/{id}/yield` is then cacheable. Earns its
-   weight once users want shareable links or saved layouts.
-6. **DuckDB Quack for multi-user writes** — if the product grew to
-   support user annotations, Quack becomes the right choice: a persistent
-   DuckDB server handling concurrent writes, Lambda functions as
-   stateless readers.
-7. **Streaming SQL display** — when the agent re-lands, show the SQL
-   being written token-by-token rather than just "Querying database…".
-   More transparent and a better demo of how the agent works.
-8. **Image vulnerability scanning in CI** — ECR has `scan_on_push = true`
-   but the findings don't surface as a PR check today. Trivy in the
-   build pipeline is trivial to add.
+2. **API Gateway + CloudFront unification** — route `/api/*` through API
+   Gateway and `/*` through S3, all behind one CloudFront distribution.
+   Same origin eliminates CORS entirely. Adds throttling and per-route
+   metrics out of the box.
+3. **Postgres + PostGIS** — swap DuckDB's haversine table scan for a
+   GiST-indexed `GEOGRAPHY` column and `ST_DWithin`. The yield query goes
+   from O(n) to O(log n). Trades DuckDB's zero-ops embedded model for a
+   managed instance, but unlocks the full PostGIS function library:
+   `ST_Buffer`, `ST_Intersects`, cluster analysis, convex hulls.
+4. **Map filters in the UI** — class · year range · mass · fell-vs-found,
+   applied to both the markers and heatmap views.
+5. **Best magnet placement algorithm** — given a fixed budget of magnets
+   (e.g. 1× L, 2× M, 3× S), find the placement that maximises iron yield.
+   Combinatorially hard in general; interesting to explore greedy,
+   simulated annealing, or a spatial clustering seed as starting
+   heuristics.

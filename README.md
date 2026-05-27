@@ -6,6 +6,12 @@
 [![dbt Docs](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt-docs.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt-docs.yml)
 [![Terraform Docs](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/terraform-docs.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/terraform-docs.yml)
 
+<!-- BEGIN_LIVE_URL -->
+**Live demo:** https://dte0t6137vkor.cloudfront.net
+<!-- END_LIVE_URL -->
+**dbt docs:** https://lilacllama.github.io/MeteoriteShennanigans/ — lineage graph, column descriptions, all 26 tests
+**Slide deck:** [60-minute technical walkthrough](docs/Lodestone_Slides.pdf)
+
 Place your magnets. Catch the most space rocks. Become the world's most data-driven supervillain — using NASA's complete 45,716-row meteorite landings dataset as your guide.
 
 ---

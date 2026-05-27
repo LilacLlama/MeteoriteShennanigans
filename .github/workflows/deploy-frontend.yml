@@ -20,7 +20,7 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
     permissions:
-      contents: read   # only need to read the repo; AWS ops use explicit credentials
+      contents: write  # needs write to commit the live URL back into README.md
     defaults:
       run:
         working-directory: frontend
@@ -84,6 +84,35 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ vars.CF_DISTRIBUTION_ID }} \
             --paths "/*"
+
+      # ── Update live URL in README ─────────────────────────────────────────────
+      # Replaces the content between <!-- BEGIN_LIVE_URL --> and <!-- END_LIVE_URL -->
+      # in the root README.md with the current CloudFront domain. Commits back
+      # with [skip ci] so the bot commit doesn't re-trigger this workflow.
+      - name: Update live URL in README
+        working-directory: ${{ github.workspace }}
+        run: |
+          DOMAIN=$(aws cloudfront get-distribution \
+            --id ${{ vars.CF_DISTRIBUTION_ID }} \
+            --query 'Distribution.DomainName' --output text)
+          URL="https://${DOMAIN}"
+          python3 - "$URL" <<'EOF'
+          import re, sys
+          path = "README.md"
+          text = open(path).read()
+          text = re.sub(
+              r"<!-- BEGIN_LIVE_URL -->.*?<!-- END_LIVE_URL -->",
+              f"<!-- BEGIN_LIVE_URL -->\n**Live demo:** {sys.argv[1]}\n<!-- END_LIVE_URL -->",
+              text,
+              flags=re.DOTALL,
+          )
+          open(path, "w").write(text)
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet || git commit -m "docs: update live URL in README [skip ci]"
+          git push
 
       # ── Summary ──────────────────────────────────────────────────────────────
       - name: Job summary
