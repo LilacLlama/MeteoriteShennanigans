@@ -1,37 +1,42 @@
 """
-Meteorites bucketed into S2 cells.
+Meteorites bucketed into S2 cells at multiple levels.
 
-S2 level 5 gives ~5,500 cells globally (~100,000 km² per cell on average) —
-coarse enough to be legible at world zoom and fine enough that Antarctica,
-the Sahara, and Oman clearly stand out.
+Emits rows at levels 3, 4, 5, 6, 7 in a single materialised table. Each
+(level, s2_cell) row carries its own count, masses, centroid, and 4-vertex
+boundary — so the frontend renders any level without doing rollup logic
+client-side. The active level is selected based on map zoom.
 
-S2 is a perfect quadtree: every cell has exactly 4 children at the next
-level, so a coarser-level view is the exact sum of its 4 children — no
-overlap, no pentagon edge cases (unlike H3). The hex `to_token()` form is
-both compact and a prefix of its children's tokens, so future hierarchical
-rollups can be done by string prefix.
+Approximate cell sizes:
+  level 3  ~1,600,000 km²  (continent slice)        → world zoom
+  level 4    ~400,000 km²  (large country)          → continent zoom
+  level 5    ~100,000 km²  (small country / region) → country zoom
+  level 6     ~25,000 km²  (state-sized)            → region zoom
+  level 7      ~6,000 km²  (large metro / county)   → metro zoom
 
-Cell IDs are stored as STRINGS (hex tokens) because the underlying int64
-loses precision in JavaScript `Number` (>2^53). The string form is the
-safe end-to-end shape across Python, DuckDB, JSON, and JS.
+S2 is a perfect quadtree — sum of any cell's 4 children at level N+1
+exactly equals the parent at level N. So this is genuinely the SAME
+aggregate computed at four granularities, not four independent estimates.
+The rollup property is the whole reason we picked S2 over H3.
 
-`iron_mass_g` comes pre-computed from `int_meteorites_with_iron` (same
-intermediate that feeds `meteorites_by_class`, so both marts agree on
-the iron-content definition by construction). Rows with no class_group
-match contribute 0 iron mass but still count in `count`, so the heatmap
-can colour by either "density of landings" or "actual magnet-catchable
-mass."
+Cell IDs are hex tokens (strings) because the underlying int64 loses
+precision in JavaScript `Number` (>2^53). Tokens at different levels are
+globally distinct (different bit-encodings), so the single `s2_cell`
+column remains unique across the whole table.
+
+`iron_mass_g` is sourced from `int_meteorites_with_iron` (same intermediate
+as `meteorites_by_class`, so both marts agree on the iron-content
+definition by construction).
 """
 
 import pandas as pd
 import s2sphere
 
-S2_LEVEL = 5
+LEVELS = (3, 4, 5, 6, 7)
 
 
-def _cell_token(lat: float, lon: float) -> str:
+def _cell_token(lat: float, lon: float, level: int) -> str:
     latlng = s2sphere.LatLng.from_degrees(lat, lon)
-    return s2sphere.CellId.from_lat_lng(latlng).parent(S2_LEVEL).to_token()
+    return s2sphere.CellId.from_lat_lng(latlng).parent(level).to_token()
 
 
 def _centroid(token: str) -> tuple[float, float]:
@@ -41,9 +46,7 @@ def _centroid(token: str) -> tuple[float, float]:
 
 def _boundary(token: str) -> tuple[list[float], list[float]]:
     """Four-vertex boundary of the S2 cell. Returned as parallel lat/lon
-    arrays — simpler to materialise in DuckDB than a list of structs.
-    Order is consistent across cells, so the frontend can polygon-close
-    by re-appending the first vertex."""
+    arrays — simpler to materialise in DuckDB than a list of structs."""
     cell = s2sphere.Cell(s2sphere.CellId.from_token(token))
     lats, lons = [], []
     for k in range(4):
@@ -53,16 +56,14 @@ def _boundary(token: str) -> tuple[list[float], list[float]]:
     return lats, lons
 
 
-def model(dbt, session):
-    dbt.config(materialized="table")
-
-    df: pd.DataFrame = dbt.ref("int_meteorites_with_iron").df()
-
-    df["s2_cell"] = [
-        _cell_token(lat, lon) for lat, lon in zip(df["latitude"], df["longitude"], strict=True)
+def _aggregate_at_level(df: pd.DataFrame, level: int) -> pd.DataFrame:
+    tokens = [
+        _cell_token(lat, lon, level)
+        for lat, lon in zip(df["latitude"], df["longitude"], strict=True)
     ]
+    work = df.assign(s2_cell=tokens)
 
-    grouped = df.groupby("s2_cell", as_index=False).agg(
+    grouped = work.groupby("s2_cell", as_index=False).agg(
         count=("id", "count"),
         total_mass_g=("mass_g", "sum"),
         iron_mass_g=("iron_mass_g", "sum"),
@@ -70,14 +71,22 @@ def model(dbt, session):
         last_year=("year_landed", "max"),
     )
 
-    centroids = [_centroid(token) for token in grouped["s2_cell"]]
+    centroids = [_centroid(t) for t in grouped["s2_cell"]]
     grouped["centroid_lat"] = [c[0] for c in centroids]
     grouped["centroid_lon"] = [c[1] for c in centroids]
 
-    boundaries = [_boundary(token) for token in grouped["s2_cell"]]
+    boundaries = [_boundary(t) for t in grouped["s2_cell"]]
     grouped["boundary_lats"] = [b[0] for b in boundaries]
     grouped["boundary_lons"] = [b[1] for b in boundaries]
 
-    grouped["level"] = S2_LEVEL
-
+    grouped["level"] = level
     return grouped
+
+
+def model(dbt, session):
+    dbt.config(materialized="table")
+
+    df: pd.DataFrame = dbt.ref("int_meteorites_with_iron").df()
+
+    per_level = [_aggregate_at_level(df, level) for level in LEVELS]
+    return pd.concat(per_level, ignore_index=True)

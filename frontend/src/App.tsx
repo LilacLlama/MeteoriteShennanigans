@@ -18,6 +18,15 @@ import { FALLBACK_MAGNET_RADII_KM } from "./constants";
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const YIELD_DEBOUNCE_MS = 200;
 
+const S2_LEVELS = [3, 4, 5, 6, 7] as const;
+const LEVEL_DESCRIPTIONS: Record<number, string> = {
+  3: "continent-scale cells",
+  4: "large-country cells",
+  5: "small-country / region cells",
+  6: "state-sized cells",
+  7: "metro / county cells",
+};
+
 function nextMagnetId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -35,7 +44,10 @@ export default function App() {
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("markers");
-  const [heatCells, setHeatCells] = useState<S2HeatCell[]>([]);
+  const [heatLevel, setHeatLevel] = useState<number>(5);
+  const [heatCellsByLevel, setHeatCellsByLevel] = useState<
+    Record<number, S2HeatCell[]>
+  >({});
   const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
@@ -65,18 +77,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Lazy fetch — only on first switch to heatmap mode. Cache thereafter;
-    // /api/heatmap is a static mart so there's nothing to invalidate.
-    if (viewMode !== "heatmap" || heatCells.length > 0) return;
+    // Eager-prefetch all 5 S2 levels on first switch to heatmap mode.
+    // Total payload is small (~1MB across all levels) and `/api/heatmap`
+    // is `Cache-Control: max-age=600`, so this trades ~1 second of upfront
+    // fetch for instant zoom transitions for the rest of the session.
+    if (viewMode !== "heatmap" || Object.keys(heatCellsByLevel).length > 0) return;
     setHeatLoading(true);
-    fetch(`${API_BASE}/api/heatmap`)
-      .then((r) => r.json())
-      .then((cells: S2HeatCell[]) => {
-        setHeatCells(cells);
+    const levels = [3, 4, 5, 6, 7];
+    Promise.all(
+      levels.map((level) =>
+        fetch(`${API_BASE}/api/heatmap?level=${level}`)
+          .then((r) => r.json())
+          .then((cells: S2HeatCell[]) => [level, cells] as const),
+      ),
+    )
+      .then((results) => {
+        setHeatCellsByLevel(Object.fromEntries(results));
         setHeatLoading(false);
       })
       .catch(() => setHeatLoading(false));
-  }, [viewMode, heatCells.length]);
+  }, [viewMode, heatCellsByLevel]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -175,7 +195,7 @@ export default function App() {
             onPlaceMagnet={handlePlaceMagnet}
             onRemoveMagnet={handleRemoveMagnet}
             viewMode={viewMode}
-            heatCells={heatCells}
+            heatCells={heatCellsByLevel[heatLevel] ?? []}
           />
         )}
 
@@ -184,7 +204,7 @@ export default function App() {
             <p className="font-medium text-gray-400 uppercase tracking-wider mb-1">
               Meteorites per cell
             </p>
-            {heatLoading && heatCells.length === 0 ? (
+            {heatLoading && Object.keys(heatCellsByLevel).length === 0 ? (
               <p className="text-gray-500 italic">Loading…</p>
             ) : (
               HEATMAP_BUCKETS.map((b) => (
@@ -300,6 +320,32 @@ export default function App() {
             ))}
           </div>
         </section>
+
+        {viewMode === "heatmap" && (
+          <section className="p-5 border-b border-gray-800 space-y-2">
+            <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+              Granularity (S2 level)
+            </p>
+            <div className="grid grid-cols-5 gap-1 bg-gray-800 rounded-lg p-1">
+              {S2_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setHeatLevel(level)}
+                  className={`rounded-md py-1.5 text-xs font-medium transition ${
+                    heatLevel === level
+                      ? "bg-gray-700 text-white"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  L{level}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-500 italic leading-relaxed">
+              {LEVEL_DESCRIPTIONS[heatLevel]} · exact rollup at every level
+            </p>
+          </section>
+        )}
 
         <section className="p-5 border-b border-gray-800 space-y-3">
           <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">

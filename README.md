@@ -24,16 +24,51 @@ You're a supervillain-in-training. You want maximum dramatic impact for minimum 
 ### Core features
 
 1. **Map of every recorded landing** — all 38,399 meteorites with valid coordinates, clustered for legibility at world zoom and broken out as individual points when you zoom in. Orange = witnessed fall, blue = found later.
-2. **Magnet placement** — click anywhere to drop a magnet. Choose a size (S = 100 km, M = 500 km, L = 1500 km radius). Coverage circles show your reach; clicking an existing magnet removes it.
-3. **Expected yield** — live tally of total catches, total mass, and classification breakdown ("~430 ordinary chondrites, 12 iron meteorites, 1 lunar specimen"), with the historical year range covered. Computed server-side via a haversine query over the dbt-built `marts.meteorites` table, deduping landings caught by overlapping magnets.
-
-The `marts.meteorites_by_s2` density grid is also exposed via `GET /api/heatmap`. A choropleth render of it on the map is next on the list. S2 was chosen over H3 because its quadtree gives exact hierarchical aggregation — coarser-zoom views can roll up by string prefix instead of recomputing from raw points.
+2. **S2 density heatmap** — toggle to the heatmap view and the same dataset renders as coloured S2 cells. Pick a granularity (L3 → L7) and the cells **subdivide exactly into 4** at each level, because S2 is a perfect quadtree. See ["Spatial model: why S2"](#spatial-model-why-s2-over-h3) below.
+3. **Magnet placement** — click anywhere to drop a magnet. Choose a size (S = 100 km, M = 500 km, L = 1500 km radius). Coverage circles show your reach; clicking an existing magnet removes it.
+4. **Expected yield** — live tally of total catches, total mass, classification breakdown (by class_group with magnetic_tier chips), and the physically meaningful **iron yield** (mass × per-class metal fraction). Computed server-side via a haversine query over `marts.meteorites`, deduping landings caught by overlapping magnets.
 
 ### Why this dataset, this framing
 
 The dataset has a lot to say about *where* and *what*, and almost nothing useful about *when in the future* — which is the right shape for a "what would have happened" simulator rather than a real prediction tool. The supervillain framing turns that limitation into a feature: nobody expects rigorous forecasting from someone holding a giant magnet to the sky.
 
-The technical guts are a real data engineering pipeline (dbt + DuckDB + S2 spatial aggregations) rather than ad-hoc Python. **The product is the demo; the pipeline is the point.**
+The technical guts are a real data engineering pipeline (dbt + DuckDB + S2 spatial aggregations + classification-via-seed) rather than ad-hoc Python. **The product is the demo; the pipeline is the point.**
+
+---
+
+## Spatial model: why S2 over H3
+
+The heatmap and yield calculator both bucket meteorites into spatial cells. Two mainstream choices for that: **H3** (Uber's hexagonal grid) and **S2** (Google's spherical quadtree). We picked S2.
+
+### The case for S2
+
+S2 is a **perfect quadtree**: every cell has exactly 4 children at the next level, the children tile the parent precisely, and `sum(4 children) == parent` *exactly* — no overlap, no fudge. The cell ID encodes the full path through the tree, so computing a parent is a bit-shift. H3 has hierarchy too (`cellToParent`, `cellToChildren`) but the children of a hex parent don't tile cleanly — they overlap into neighbouring parents' children, plus there are 12 pentagons at every resolution that need special handling. For aggregation, that's the difference between "exact rollup" and "approximation."
+
+For this project, the win is concrete: the heatmap supports **explicit level switching** via a 5-button picker in the sidebar (L3 → L7). The numbers at every level are the **same data** rebucketed — verified at build time:
+
+```
+top L3 cell `afc` count = 7,026
+its two non-empty L4 children:
+  `af9` count = 6,826
+  `aff` count =   200
+                ─────
+                7,026 ✓
+```
+
+### The mart
+
+`marts.meteorites_by_s2` is a single table with one row per `(level, s2_cell)`, materialised by a dbt Python model. Each row carries the count, total mass, iron mass, cell centroid, and the 4-vertex polygon boundary (so the frontend renders Leaflet polygons without an S2 library client-side). Cell IDs are stored as **hex tokens** (strings) — the underlying int64 loses precision in JavaScript's `Number`.
+
+### What the frontend does
+
+Eager-fetches all 5 levels on first switch to heatmap mode (~1 MB total, parallel, ~1 sec). The user picks the active level explicitly from the sidebar; switching levels is instant because every level is already cached client-side. Responses are also `Cache-Control: max-age=60`, so browser-level cache survives page reloads too.
+
+The original design used a `zoomend` listener to pick level automatically from zoom — dropped after testing because L3/L4 polygons rendering near the poles and across the antimeridian break under web-mercator, and silent auto-switching made those failures invisible. Explicit user control surfaces "L3 is coarse, look at the rollup" as a deliberate demo beat rather than a hidden side-effect of panning.
+
+### What we'd do differently in a real product
+
+- **Computed rollup levels** rather than materialised. Stored level 7, computed 3-6 on demand via S2's `cell.parent(N)`. Cheaper storage, slower queries — fine tradeoff at our scale, but materialising all 5 levels is simpler.
+- **Bring `s2-geometry` client-side** to support arbitrary zoom levels without backend round-trips, once the JS-precision int64 problem is solved properly (BigInt + hex round-trip).
 
 ---
 

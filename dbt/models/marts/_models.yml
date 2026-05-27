@@ -54,24 +54,29 @@ models:
 
   - name: meteorites_by_s2
     description: |
-      Meteorites bucketed into S2 cells at level 5 (~5,500 cells globally,
-      ~100,000 km² each). One row per occupied cell. Drives the density
-      heatmap. Cell IDs are hex tokens (strings) because the underlying int64
-      loses precision in JavaScript Number — strings round-trip safely across
-      the whole stack. Includes cell centroids so the frontend doesn't need
-      an S2 library client-side for label positioning.
+      Meteorites bucketed into S2 cells at LEVELS 3, 4, 5, 6, 7 — one row
+      per (level, s2_cell). The frontend picks the active level based on
+      map zoom (continent → state → metro), so this single mart drives the
+      density heatmap at every granularity.
+
+      Cell IDs are hex tokens (strings) because the underlying int64 loses
+      precision in JavaScript Number. Tokens at different levels have
+      distinct bit-encodings, so `s2_cell` remains unique across the entire
+      table (no need for a composite key).
 
       `iron_mass_g` is the per-cell sum of free Fe-Ni metal mass — the
       physically meaningful "magnet yield" quantity. `count` is the total
-      number of meteorites in the cell (including unclassified ones, which
-      contribute 0 iron mass).
+      number of meteorites in the cell.
 
       S2 was chosen over H3 for its exact hierarchical aggregation:
-      `sum(4 children) = parent` with no overlap, so coarser-zoom views can
-      roll up by string prefix instead of recomputing from raw points.
+      `sum(4 children) = parent` with no overlap, no pentagon edge cases.
+      The numbers at level 3 are the EXACT sum of the corresponding cells
+      at level 4 — not an approximation. That property is what makes
+      multi-zoom heatmaps trustworthy as the same data viewed at different
+      granularities, not four separate estimates.
     columns:
       - name: s2_cell
-        description: S2 cell ID as a hex token (e.g. "af0c"). String for JS precision.
+        description: S2 cell ID as a hex token (e.g. "af0c"). String for JS precision. Unique across levels.
         tests:
           - not_null
           - unique
@@ -82,9 +87,12 @@ models:
         tests:
           - not_null
       - name: level
-        description: S2 level (currently always 5). Carried for future multi-level marts.
+        description: S2 level (3, 4, 5, 6, or 7). Filter on this in queries.
         tests:
           - not_null
+          - accepted_values:
+              arguments:
+                values: [3, 4, 5, 6, 7]
 
   - name: meteorites_by_class
     description: |

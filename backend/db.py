@@ -75,17 +75,21 @@ def get_meteorite(meteorite_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
-def get_s2_cells() -> list[dict]:
-    """S2 density grid driving the heatmap layer."""
-    return query("""
+def get_s2_cells(level: int = 5) -> list[dict]:
+    """S2 density grid at the requested level (3..7)."""
+    return query(
+        """
         SELECT
             s2_cell, count, total_mass_g, iron_mass_g,
             centroid_lat, centroid_lon,
             boundary_lats, boundary_lons,
             level
         FROM main_marts.meteorites_by_s2
+        WHERE level = ?
         ORDER BY count DESC
-    """)
+        """,
+        [level],
+    )
 
 
 # Magnet sizes → effective radius in km.

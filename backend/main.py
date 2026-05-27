@@ -19,7 +19,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -95,14 +95,31 @@ def meteorite_detail(meteorite_id: int):
 
 
 @app.get("/api/heatmap", summary="S2 cell density grid", tags=["heatmap"])
-def heatmap():
+def heatmap(
+    response: Response,
+    level: int = Query(
+        default=5,
+        ge=3,
+        le=7,
+        description=(
+            "S2 cell level. 3 = ~1.6M km² cells (continent slice), "
+            "7 = ~6k km² cells (metro). Frontend picks based on map zoom."
+        ),
+    ),
+):
     """
-    Meteorites bucketed into S2 cells at level 5 (~880 occupied cells globally).
-    Each row carries `count`, `total_mass_g`, `iron_mass_g`, the cell centroid,
-    and the 4-vertex polygon boundary so the frontend can render the choropleth
-    without an S2 library client-side.
+    Meteorites bucketed into S2 cells at the requested level (3-7). Each row
+    carries `count`, `total_mass_g`, `iron_mass_g`, the cell centroid, and a
+    4-vertex polygon boundary so the frontend renders the choropleth without
+    an S2 library client-side.
+
+    The warehouse is rebuilt only at deploy time, so responses are safe to
+    cache. We use a short `max-age=60` so dev iteration on the mart isn't
+    painful — easy to bump in prod (or make env-conditional) if cache hit
+    rate matters more than staleness window.
     """
-    return get_s2_cells()
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return get_s2_cells(level=level)
 
 
 class Magnet(BaseModel):
