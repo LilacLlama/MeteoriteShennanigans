@@ -1,5 +1,10 @@
 # ☄️ Meteorite Explorer
 
+[![Lint & Type Check](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/lint.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/lint.yml)
+[![dbt Build & Tests](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt.yml)
+[![Backend Tests](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/pytest.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/pytest.yml)
+[![dbt Docs](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt-docs.yml/badge.svg)](https://github.com/LilacLlama/MeteoriteShennanigans/actions/workflows/dbt-docs.yml)
+
 Place your magnets. Catch the most space rocks. Become the world's most data-driven supervillain — using NASA's complete 45,716-row meteorite landings dataset as your guide.
 
 ---

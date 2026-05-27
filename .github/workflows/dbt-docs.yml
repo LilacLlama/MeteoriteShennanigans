@@ -1,0 +1,58 @@
+name: dbt Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages deployments are serialised — never let two doc deploys race.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Generate docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: dbt/requirements.txt
+
+      - name: Install dbt
+        run: pip install -r dbt/requirements.txt
+
+      # `dbt docs generate` introspects the warehouse to build the catalog
+      # (column types, row counts). Without a built warehouse, the docs are
+      # YAML-only — descriptions + lineage but no real column metadata. So
+      # we build first, then generate.
+      - name: Build warehouse + generate docs
+        working-directory: dbt
+        run: |
+          dbt deps
+          dbt build
+          dbt docs generate
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dbt/target
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
