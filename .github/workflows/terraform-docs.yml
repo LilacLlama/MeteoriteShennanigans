@@ -1,0 +1,41 @@
+name: Terraform Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Inject terraform-docs into terraform/README.md
+    runs-on: ubuntu-latest
+    steps:
+      # Important: check out with a token that can push back. The default
+      # GITHUB_TOKEN works for same-repo pushes on a solo repo. The ref pin
+      # keeps us on main; without it the action's commit would target the
+      # SHA we checked out, not the branch tip.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Render and inject docs
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: terraform
+          output-file: README.md
+          output-method: inject
+          # Auto-commit only when there's an actual diff. The action's git
+          # logic handles the no-op case. [skip ci] keeps the bot commit
+          # from re-triggering this workflow.
+          git-push: "true"
+          git-commit-message: "docs(terraform): regenerate terraform-docs [skip ci]"
