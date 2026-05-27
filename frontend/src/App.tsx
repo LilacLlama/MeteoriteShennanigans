@@ -184,7 +184,7 @@ export default function App() {
               <p className="text-red-400 font-medium">Could not load data</p>
               <p className="text-gray-500 text-sm">{error}</p>
               <p className="text-gray-600 text-xs">
-                Is the backend running on :8000?
+                Your reconnaissance feed appears severed. Check the data conduit.
               </p>
             </div>
           </div>
@@ -483,7 +483,7 @@ export default function App() {
         </section>
 
         <footer className="p-3 border-t border-gray-800 text-[10px] text-gray-600 text-center">
-          historical data only · 38,399 meteorites · NASA Open Data
+          historical data only · 32,186 meteorites · NASA Open Data
         </footer>
       </aside>
     </div>
