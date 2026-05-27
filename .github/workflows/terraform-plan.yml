@@ -4,15 +4,21 @@ on:
   pull_request:
     paths:
       - "terraform/**"
-      - ".github/workflows/deploy-infra.yml"
+      - ".github/workflows/terraform-plan.yml"
 
 env:
-  AWS_REGION: us-east-1
+  # Matches deploy-backend.yml / deploy-frontend.yml. Override via the
+  # AWS_REGION repository variable if you deploy to a different region.
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
   TF_VERSION: "1.9.8"
 
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plan:
@@ -61,5 +67,6 @@ jobs:
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-# Terraform is applied locally (make tf-apply), not by CI.
-# State is local — upgrade to S3 backend when multiple people need to apply.
+# This workflow only PLANS — it never applies. Terraform state is local;
+# apply is `make tf-apply` from your machine. Upgrade to S3 backend +
+# terraform apply in CI if multiple people need to apply.

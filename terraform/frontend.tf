@@ -127,19 +127,6 @@ resource "aws_s3_bucket_policy" "frontend" {
   })
 }
 
-# ── Outputs ───────────────────────────────────────────────────────────────────
-
-output "frontend_bucket" {
-  description = "S3 bucket name — used by deploy-frontend.yml for aws s3 sync"
-  value       = aws_s3_bucket.frontend.id
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID — used by deploy-frontend.yml for cache invalidation"
-  value       = aws_cloudfront_distribution.frontend.id
-}
-
-output "frontend_url" {
-  description = "Public URL of the frontend"
-  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
-}
+# Frontend outputs (frontend_bucket, cloudfront_distribution_id, frontend_url)
+# live in outputs.tf alongside the backend ones — single source of truth for
+# values bootstrap.sh and the deploy workflows consume.
