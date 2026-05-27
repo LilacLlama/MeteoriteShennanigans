@@ -1,6 +1,7 @@
 import { Polygon, Tooltip } from "react-leaflet";
 import type { S2HeatCell } from "../types";
 import { massLabel } from "../utils/format";
+import { cellToPolygons } from "../utils/cellPolygons";
 
 // Log-bucketed count → heat palette. Buckets chosen so each row of the
 // legend is meaningfully different at a glance: Antarctica's top cells
@@ -29,14 +30,15 @@ interface Props {
 export default function HeatmapLayer({ cells }: Props) {
   return (
     <>
-      {cells.map((cell) => {
-        const positions: [number, number][] = cell.boundary_lats.map(
-          (lat, i) => [lat, cell.boundary_lons[i]],
-        );
+      {cells.flatMap((cell) => {
         const color = colorForCount(cell.count);
-        return (
+        // One cell may render as 1 or 2 polygons — antimeridian crossers
+        // and polar caps get split (see utils/cellPolygons). Each piece
+        // carries an identical tooltip so hover works either side of the seam.
+        const pieces = cellToPolygons(cell.boundary_lats, cell.boundary_lons);
+        return pieces.map((positions, pieceIdx) => (
           <Polygon
-            key={cell.s2_cell}
+            key={`${cell.s2_cell}:${pieceIdx}`}
             positions={positions}
             pathOptions={{
               color,
@@ -56,7 +58,7 @@ export default function HeatmapLayer({ cells }: Props) {
               </div>
             </Tooltip>
           </Polygon>
-        );
+        ));
       })}
     </>
   );
