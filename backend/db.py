@@ -151,12 +151,12 @@ def get_yield(magnets: list[tuple[float, float, float]]) -> dict:
     radii = [r for _, _, r in magnets]
 
     # Query through `int_meteorites_with_iron` so the runtime yield and the
-    # offline marts share one definition of iron_mass_g. The intermediate is
-    # materialised as a view, so query cost is identical to the raw join.
-    # The `magnetic_tier IS NOT NULL` filter mirrors `meteorites_by_class`:
-    # defensive against the relationships test getting disabled or the
-    # `unknown` seed row going missing — under normal conditions it's a
-    # no-op since every class_group has a dim row.
+    # offline heatmap mart share one definition of iron_mass_g. The
+    # intermediate is materialised as a view, so query cost is identical to
+    # the raw join. The `magnetic_tier IS NOT NULL` filter is defensive
+    # against the relationships test getting disabled or the `unknown` seed
+    # row going missing — under normal conditions it's a no-op since every
+    # class_group has a dim row.
     caught = (
         get_conn()
         .execute(

@@ -97,26 +97,3 @@ models:
               arguments:
                 values: [3, 4, 5, 6, 7]
 
-  - name: meteorites_by_class
-    description: |
-      Aggregate by canonical class_group (~35 buckets) with magnetic_tier
-      joined in. The class_group bucketing — not raw recclass (~400 distinct
-      values) — is what lines up with the magnet-yield interpretation.
-    columns:
-      - name: class_group
-        tests:
-          - not_null
-          - unique
-      - name: magnetic_tier
-        tests:
-          - accepted_values:
-              arguments:
-                values: ['strong', 'medium', 'weak', 'none']
-
-  - name: meteorites_by_decade
-    description: Aggregate by decade. Surfaces the post-1980 Antarctic discovery boom.
-    columns:
-      - name: decade
-        tests:
-          - not_null
-          - unique
