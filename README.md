@@ -106,9 +106,12 @@ The Vite dev server proxies `/api/*` to `localhost:8000` automatically — no CO
 AWS resources are managed with Terraform (local state). The one-time setup is handled by `bootstrap.sh`:
 
 ```bash
-cp .env.example .env   # fill in APP_NAME, AWS_REGION
-make bootstrap         # ECR → Docker image → terraform apply → prints GitHub secrets
+cp .env.example .env                                                # fill in APP_NAME, AWS_REGION
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars    # same values, separately reviewed
+make bootstrap                                                      # ECR → Docker image → terraform apply → prints GitHub secrets
 ```
+
+(The two files duplicate `aws_region` / `app_name` deliberately — `.env` drives the bootstrap shell script, `tfvars` is Terraform's input. Bootstrap won't run without both.)
 
 After bootstrap, day-to-day infra changes use:
 
@@ -170,7 +173,11 @@ mete/
 ├── Dockerfile                   # Multi-stage: dbt build → slim runtime
 └── .github/workflows/
     ├── lint.yml                 # ruff + tsc on every PR
+    ├── pytest.yml               # backend pytest on every PR
+    ├── dbt.yml                  # dbt build + 50+ data tests on every PR
+    ├── dbt-docs.yml             # publish dbt docs to GitHub Pages on push to main
+    ├── terraform-docs.yml       # auto-update terraform/README.md on push to main
+    ├── terraform-plan.yml       # terraform plan on PR (apply is `make tf-apply` locally)
     ├── deploy-backend.yml       # ECR → Lambda on push to main
-    ├── deploy-frontend.yml      # Vercel on push to main
-    └── deploy-infra.yml         # terraform plan on PR (apply locally)
+    └── deploy-frontend.yml      # S3 + CloudFront invalidation on push to main
 ```
