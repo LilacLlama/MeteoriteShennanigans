@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { Magnet, MagnetRadiiKm, MeteoritePoint, S2HeatCell, ViewMode } from "../types";
-import { massLabel } from "../lib/format";
+import { massLabel } from "../utils/format";
 import HeatmapLayer from "./HeatmapLayer";
 
 interface Props {

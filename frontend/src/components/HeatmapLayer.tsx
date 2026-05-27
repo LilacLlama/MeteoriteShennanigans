@@ -1,6 +1,6 @@
 import { Polygon, Tooltip } from "react-leaflet";
 import type { S2HeatCell } from "../types";
-import { massLabel } from "../lib/format";
+import { massLabel } from "../utils/format";
 
 // Log-bucketed count → heat palette. Buckets chosen so each row of the
 // legend is meaningfully different at a glance: Antarctica's top cells

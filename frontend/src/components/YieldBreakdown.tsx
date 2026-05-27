@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { massLabel } from "../lib/format";
+import { massLabel } from "../utils/format";
 import type { MagneticTier, YieldClassRow } from "../types";
 
 const TIER_CHIP: Record<MagneticTier, string> = {

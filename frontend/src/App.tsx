@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Map from "./components/Map";
 import { HEATMAP_BUCKETS } from "./components/HeatmapLayer";
 import YieldBreakdown from "./components/YieldBreakdown";
-import { massLabel } from "./lib/format";
+import { massLabel } from "./utils/format";
 import type {
   AppConfig,
   Magnet,
