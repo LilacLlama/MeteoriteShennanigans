@@ -41,9 +41,8 @@ app = FastAPI(
     version="0.1.0",
     description=(
         "Backend for the supervillain magnet-placement game. Serves the "
-        "NASA meteorite landings dataset (38,399 valid coordinates) plus "
-        "a spatial yield calculator and S2 density grid, all read from a "
-        "dbt-built DuckDB warehouse."
+        "NASA meteorite landings dataset a spatial yield calculator and "
+        "S2 density grid, all read from a dbt-built DuckDB warehouse."
     ),
     lifespan=lifespan,
 )

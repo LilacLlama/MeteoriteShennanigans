@@ -9,7 +9,7 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_iam_user" "ci" {
   name          = "${var.app_name}-ci"
-  force_destroy = true   # deletes access keys automatically on destroy
+  force_destroy = true # deletes access keys automatically on destroy
 }
 
 resource "aws_iam_user_policy" "ci" {

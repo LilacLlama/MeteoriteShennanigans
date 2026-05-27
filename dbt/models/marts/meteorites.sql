@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- Final fact table. Carries the canonical `class_group` from
 -- `int_meteorites_classified` alongside NASA's original `recclass`. The
 -- magnet-yield query joins this to `dim_meteorite_class` on `class_group` to

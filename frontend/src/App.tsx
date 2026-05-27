@@ -16,7 +16,7 @@ import type {
 import { FALLBACK_MAGNET_RADII_KM } from "./constants";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
-const YIELD_DEBOUNCE_MS = 200;
+const YIELD_DEBOUNCE_MS = 100;
 
 const S2_LEVELS = [3, 4, 5, 6, 7] as const;
 const LEVEL_DESCRIPTIONS: Record<number, string> = {
@@ -33,7 +33,9 @@ function nextMagnetId(): string {
 
 export default function App() {
   const [points, setPoints] = useState<MeteoritePoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  // `loading` now tracks the lazy markers fetch (fires on first switch to
+  // markers view). Initial mount shows the heatmap, so no blocking load.
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MeteoritePoint | null>(null);
 
@@ -43,7 +45,7 @@ export default function App() {
   const [yieldLoading, setYieldLoading] = useState(false);
   const [radii, setRadii] = useState<MagnetRadiiKm>(FALLBACK_MAGNET_RADII_KM);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("markers");
+  const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
   const [heatLevel, setHeatLevel] = useState<number>(5);
   const [heatCellsByLevel, setHeatCellsByLevel] = useState<
     Record<number, S2HeatCell[]>
@@ -51,6 +53,10 @@ export default function App() {
   const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
+    // Lazy fetch — only when user switches to markers view, and only once.
+    // Heatmap is the default view, so most visitors never pay this ~3MB cost.
+    if (viewMode !== "markers" || points.length > 0 || loading) return;
+    setLoading(true);
     fetch(`${API_BASE}/api/meteorites`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -64,7 +70,7 @@ export default function App() {
         setError(e.message);
         setLoading(false);
       });
-  }, []);
+  }, [viewMode, points.length, loading]);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/config`)
@@ -77,26 +83,46 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Eager-prefetch all 5 S2 levels on first switch to heatmap mode.
-    // Total payload is small (~1MB across all levels) and `/api/heatmap`
-    // is `Cache-Control: max-age=600`, so this trades ~1 second of upfront
-    // fetch for instant zoom transitions for the rest of the session.
-    if (viewMode !== "heatmap" || Object.keys(heatCellsByLevel).length > 0) return;
+    // Eager-prefetch all 5 S2 levels on mount. Heatmap is the default view
+    // (and the demo's main visual), so this is the initial blocking fetch.
+    // Total ~1.8MB across all levels; once loaded, switching between L3-L7
+    // is instant from the cache.
+    //
+    // Using `Promise.allSettled` so one failed level doesn't nuke the other
+    // four — the user still sees a partial heatmap. If ALL levels fail, we
+    // surface the existing error overlay.
     setHeatLoading(true);
     const levels = [3, 4, 5, 6, 7];
-    Promise.all(
+    Promise.allSettled(
       levels.map((level) =>
         fetch(`${API_BASE}/api/heatmap?level=${level}`)
-          .then((r) => r.json())
+          .then((r) => {
+            if (!r.ok) throw new Error(`L${level}: HTTP ${r.status}`);
+            return r.json();
+          })
           .then((cells: S2HeatCell[]) => [level, cells] as const),
       ),
-    )
-      .then((results) => {
-        setHeatCellsByLevel(Object.fromEntries(results));
-        setHeatLoading(false);
-      })
-      .catch(() => setHeatLoading(false));
-  }, [viewMode, heatCellsByLevel]);
+    ).then((results) => {
+      const successes = results
+        .filter(
+          (r): r is PromiseFulfilledResult<readonly [number, S2HeatCell[]]> =>
+            r.status === "fulfilled",
+        )
+        .map((r) => r.value);
+      const failureCount = results.length - successes.length;
+
+      setHeatCellsByLevel(Object.fromEntries(successes));
+      setHeatLoading(false);
+
+      if (failureCount === results.length) {
+        setError("Heatmap data unavailable — try refreshing in a moment.");
+      } else if (failureCount > 0) {
+        console.warn(
+          `Heatmap: ${failureCount}/${results.length} level fetches failed; rendering partial data`,
+        );
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -164,11 +190,11 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">
       <div className="flex-1 relative">
-        {loading && (
+        {heatLoading && Object.keys(heatCellsByLevel).length === 0 && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-950">
             <div className="text-center space-y-3">
               <div className="text-4xl animate-spin">☄️</div>
-              <p className="text-gray-400 text-sm">Loading 38,399 meteorites…</p>
+              <p className="text-gray-400 text-sm">Loading heatmap…</p>
             </div>
           </div>
         )}
@@ -179,13 +205,13 @@ export default function App() {
               <p className="text-red-400 font-medium">Could not load data</p>
               <p className="text-gray-500 text-sm">{error}</p>
               <p className="text-gray-600 text-xs">
-                Is the backend running on :8000?
+                Your reconnaissance feed appears severed. Check the data conduit.
               </p>
             </div>
           </div>
         )}
 
-        {!loading && !error && (
+        {!error && (
           <Map
             points={points}
             selectedId={selected?.id ?? null}
@@ -478,7 +504,7 @@ export default function App() {
         </section>
 
         <footer className="p-3 border-t border-gray-800 text-[10px] text-gray-600 text-center">
-          historical data only · 38,399 meteorites · NASA Open Data
+          historical data only · 32,186 meteorites · NASA Open Data
         </footer>
       </aside>
     </div>

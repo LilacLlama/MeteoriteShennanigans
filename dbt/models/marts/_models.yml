@@ -23,8 +23,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('dim_meteorite_class')
-              field: class_group
+              arguments:
+                to: ref('dim_meteorite_class')
+                field: class_group
 
   - name: dim_meteorite_class
     description: |
@@ -41,13 +42,15 @@ models:
         tests:
           - not_null
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 100
+              arguments:
+                min_value: 0
+                max_value: 100
       - name: magnetic_tier
         tests:
           - not_null
           - accepted_values:
-              values: ['strong', 'medium', 'weak', 'none']
+              arguments:
+                values: ['strong', 'medium', 'weak', 'none']
       - name: is_magnetically_catchable
         tests:
           - not_null
@@ -94,25 +97,3 @@ models:
               arguments:
                 values: [3, 4, 5, 6, 7]
 
-  - name: meteorites_by_class
-    description: |
-      Aggregate by canonical class group with magnetic_tier joined in.
-      Replaces the per-recclass aggregate (~400 buckets) with a per-class_group
-      view (~35 buckets) that lines up with the magnet-yield interpretation.
-    columns:
-      - name: class_group
-        tests:
-          - not_null
-          - unique
-      - name: magnetic_tier
-        tests:
-          - accepted_values:
-              values: ['strong', 'medium', 'weak', 'none']
-
-  - name: meteorites_by_decade
-    description: Aggregate by decade. Surfaces the post-1980 Antarctic discovery boom.
-    columns:
-      - name: decade
-        tests:
-          - not_null
-          - unique

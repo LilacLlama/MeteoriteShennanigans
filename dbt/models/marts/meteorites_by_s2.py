@@ -23,9 +23,9 @@ precision in JavaScript `Number` (>2^53). Tokens at different levels are
 globally distinct (different bit-encodings), so the single `s2_cell`
 column remains unique across the whole table.
 
-`iron_mass_g` is sourced from `int_meteorites_with_iron` (same intermediate
-as `meteorites_by_class`, so both marts agree on the iron-content
-definition by construction).
+`iron_mass_g` is sourced from `int_meteorites_with_iron` (the same
+intermediate the runtime `get_yield` query reads from, so the offline
+heatmap and the live magnet calc agree by construction).
 """
 
 import pandas as pd

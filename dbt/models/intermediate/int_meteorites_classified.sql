@@ -70,6 +70,7 @@ select
         -- Ordinary chondrites. LL before L (longest prefix wins).
         when regexp_matches(rc, '^LL')                then 'LL'
         when regexp_matches(rc, '^L([0-9./~ -]|$)')   then 'L'
+        -- '(' and '?' included to match NASA's H(L)3, H(L)3-an, H(5?) entries.
         when regexp_matches(rc, '^H([0-9(?/.~ -]|$)') then 'H'
         when rc = 'OC'                                then 'OC_unspecified'
 

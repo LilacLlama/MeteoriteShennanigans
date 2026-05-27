@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- Pure dimension. One row per class_group, all attributes either sourced
 -- from the seed (physical facts) or derived here (interpretation).
 --

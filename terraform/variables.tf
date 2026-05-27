@@ -11,7 +11,7 @@ variable "app_name" {
 }
 
 variable "lambda_memory_mb" {
-  description = "Lambda memory in MB (DuckDB needs headroom for 45k-row dataset)"
+  description = "Lambda memory in MB. 512 has headroom; the prebuilt warehouse is ~2 MB and queries are small, so 256 likely also works."
   type        = number
   default     = 512
 }
@@ -20,10 +20,4 @@ variable "lambda_timeout_s" {
   description = "Lambda timeout in seconds"
   type        = number
   default     = 30
-}
-
-variable "bedrock_model_id" {
-  description = "Bedrock cross-region inference profile ID for Claude"
-  type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250514-v1:0"
 }

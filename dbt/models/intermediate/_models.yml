@@ -23,16 +23,17 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('dim_meteorite_class')
-              field: class_group
+              arguments:
+                to: ref('dim_meteorite_class')
+                field: class_group
 
   - name: int_meteorites_with_iron
     description: |
       Per-row enrichment of `meteorites` with `metal_fraction_pct`,
       `magnetic_tier`, and `iron_mass_g` from `dim_meteorite_class`. Single
-      source of truth for "how much catchable iron is in this rock?" — both
-      `meteorites_by_class` and `meteorites_by_s2` consume this rather than
-      redoing the join.
+      source of truth for "how much catchable iron is in this rock?" —
+      `meteorites_by_s2` and the runtime `get_yield` query both consume this
+      rather than redoing the join.
 
       LEFT JOIN preserves unclassified rows with iron_mass_g = 0. Filter on
       `magnetic_tier IS NOT NULL` to drop them.

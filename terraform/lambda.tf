@@ -19,24 +19,9 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Bedrock — invoke Claude models
-resource "aws_iam_role_policy" "bedrock" {
-  name = "${var.app_name}-bedrock"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream",
-      ]
-      # Scope to Anthropic models only
-      Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.*"
-    }]
-  })
-}
+# Bedrock invoke policy lived here previously for the Claude agent — removed
+# along with the agent itself (see DEVLOG 2026-05-25). Reintroduce alongside
+# the agent code if/when it comes back.
 
 # ── Lambda Function ──────────────────────────────────────────────────────────
 
@@ -53,13 +38,10 @@ resource "aws_lambda_function" "api" {
   memory_size = var.lambda_memory_mb
   timeout     = var.lambda_timeout_s
 
-  environment {
-    variables = {
-      # AWS_REGION is reserved — Lambda injects it automatically.
-      # App code can read os.environ["AWS_REGION"] without us setting it here.
-      BEDROCK_MODEL_ID = var.bedrock_model_id
-    }
-  }
+  # No environment variables today. AWS_REGION is reserved — Lambda injects
+  # it automatically; app code reads os.environ["AWS_REGION"] without us
+  # setting it here. Add an environment {} block if/when the agent returns
+  # (it needed BEDROCK_MODEL_ID).
 
   lifecycle {
     ignore_changes = [image_uri]
