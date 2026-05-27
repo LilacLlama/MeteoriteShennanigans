@@ -24,7 +24,7 @@ You're a supervillain-in-training. You want maximum dramatic impact for minimum 
 
 ### Core features
 
-1. **Map of every recorded landing** — all 38,399 meteorites with valid coordinates, clustered for legibility at world zoom and broken out as individual points when you zoom in. Orange = witnessed fall, blue = found later.
+1. **Map of every recorded landing** — all 32,186 meteorites with valid coordinates (out of 45,716 raw; see "Data quality" below), clustered for legibility at world zoom and broken out as individual points when you zoom in. Orange = witnessed fall, blue = found later.
 2. **S2 density heatmap** — toggle to the heatmap view and the same dataset renders as coloured S2 cells. Pick a granularity (L3 → L7) and the cells **subdivide exactly into 4** at each level, because S2 is a perfect quadtree. See ["Spatial model: why S2"](#spatial-model-why-s2-over-h3) below.
 3. **Magnet placement** — click anywhere to drop a magnet. Choose a size (S = 100 km, M = 500 km, L = 1500 km radius). Coverage circles show your reach; clicking an existing magnet removes it.
 4. **Expected yield** — live tally of total catches, total mass, classification breakdown (by class_group with magnetic_tier chips), and the physically meaningful **iron yield** (mass × per-class metal fraction). Computed server-side via a haversine query over `marts.meteorites`, deduping landings caught by overlapping magnets.
@@ -34,6 +34,33 @@ You're a supervillain-in-training. You want maximum dramatic impact for minimum 
 The dataset has a lot to say about *where* and *what*, and almost nothing useful about *when in the future* — which is the right shape for a "what would have happened" simulator rather than a real prediction tool. The supervillain framing turns that limitation into a feature: nobody expects rigorous forecasting from someone holding a giant magnet to the sky.
 
 The technical guts are a real data engineering pipeline (dbt + DuckDB + S2 spatial aggregations + classification-via-seed) rather than ad-hoc Python. **The product is the demo; the pipeline is the point.**
+
+---
+
+## Data quality: what the pipeline catches
+
+The raw NASA CSV is dirty in mundane ways — null placeholders, typos, free-text classifications. The staging + intermediate layers drop or normalize each of these explicitly, and dbt tests fail the build if any of the assumptions break.
+
+| Filter / transformation | Where | Rows affected | Why |
+|---|---|---|---|
+| NULL latitude / longitude | `stg_meteorites` | ~7,300 dropped | A placement tool can't render unmappable rows |
+| Out-of-range coords (lat\|lon outside [-90,90]/[-180,180]) | `stg_meteorites` | 0 today | Defensive — catches a future bad export |
+| `(0, 0)` null-placeholder | `stg_meteorites` | **6,213 dropped** | NASA uses null-island as a stand-in for unknown coords; if left in, they all bucket into one S2 cell in the Gulf of Guinea and dominate the heatmap |
+| Year outside [860, 2025] | `stg_meteorites` | **1 dropped** | Caught the "Northwest Africa 7701 → year 2101" typo. The `dbt_utils.accepted_range` test on this column blocks any new bad row |
+| 400+ `recclass` values → ~35 canonical `class_group` | `int_meteorites_classified` | 0 dropped, recoded | NASA's free-text classifications need normalizing to join with the seed |
+| `Relict X` prefix stripping | `int_meteorites_classified` | 0 dropped, recoded | Weathered samples bucket like their underlying class (`Relict OC` → `OC_unspecified`) |
+| **Survives staging** | | **32,186 / 45,716 raw** | |
+
+### What's enforced as tests, not comments
+
+Every filter above is backed by a dbt test that fails the build if violated. A few highlights:
+
+- `not_null` + `dbt_utils.accepted_range` on `latitude` / `longitude` — out-of-range or null coords break the build
+- `dbt_utils.accepted_range` on `year_landed` (860–2025) — catches future bad-year exports
+- `relationships` on `meteorites.class_group → dim_meteorite_class` — if NASA adds a new `recclass` we haven't classified, the FK fails
+- Singular test `no_null_island.sql` — explicit assertion that the `(0, 0)` filter actually worked
+- Singular test `class_group_one_per_meteorite.sql` — guard against join-fanout bugs in the classification step
+- 50+ tests total; run via `make dbt-test` or `cd dbt && dbt test`
 
 ---
 
